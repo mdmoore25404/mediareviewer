@@ -27,9 +27,7 @@ def create_app(settings: AppSettings | None = None) -> Flask:
     )
     app.extensions["mediareviewer.media_scanner"] = MediaScanner()
     app.extensions["mediareviewer.companion_actions"] = CompanionActionService()
-    app.extensions["mediareviewer.thumbnail_cache"] = ThumbnailCacheService(
-        cache_root=resolved_settings.thumbnail_cache_directory,
-    )
+    app.extensions["mediareviewer.thumbnail_cache"] = ThumbnailCacheService()
     app.register_blueprint(api_blueprint)
     return app
 

@@ -78,12 +78,26 @@ These hostnames are applied to:
 
 ## Thumbnail cache behavior
 
-Media Reviewer now generates and reuses thumbnails on disk while scanning and browsing.
+Media Reviewer generates and reuses thumbnails on disk within each mounted review folder, enabling different tool instances to share the cache without duplication.
 
-- On Linux, the default cache root is `~/.cache/thumbnails`, using the freedesktop thumbnail directory layout so existing file-manager thumbnails can be reused when present and generated thumbnails follow the same convention.
-- On macOS and Windows, Media Reviewer uses its own cache directory under `~/.mediareviewer/thumbnails` by default because Finder and Explorer thumbnail stores are not public, stable interoperability targets.
-- You can override the cache root with `MEDIAREVIEWER_THUMBNAIL_CACHE_DIR`.
-- Fullscreen review still streams the original media file; cached thumbnails are used for grid and list previews.
+- Thumbnails are stored at `<review-path>/.thumbnails` using a hash-based directory structure and PNG format.
+- Image files generate resized thumbnails using Python Imaging Library (PIL).
+- Video files use `ffmpeg` to extract a keyframe and generate a thumbnail; if `ffmpeg` is unavailable or fails, a placeholder is generated instead.
+- Because thumbnails live at the folder level, multiple instances of Media Reviewer accessing the same mounted storage share the cache and benefit from reduced processing.
+- Thumbnails are automatically deleted when their source media is marked as trashed.
+- Fullscreen review still streams the original media file; cached thumbnails are used only for grid and list previews.
+
+## Review mode keyboard shortcuts
+
+When in fullscreen review mode:
+
+- **Escape**: Exit fullscreen review mode
+- **Left Arrow**: View previous item
+- **Right Arrow**: View next item
+- **D** or **T**: Mark item as trashed
+- **S**: Mark item as seen
+- **F** or **L**: Lock (favorite) item
+- **Swipe left/right or drag**: Navigate to next/previous item on touch devices
 
 ## Architecture Portability
 

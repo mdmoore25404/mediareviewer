@@ -167,12 +167,10 @@ def test_media_thumbnail_serves_cached_png(tmp_path: Path) -> None:
         encoding="utf-8",
     )
 
-    thumbnail_cache_directory = tmp_path / "thumbnail-cache"
     settings = AppSettings(
         state_directory=state_directory,
         hidden_picker_paths=(),
         deletion_workers=1,
-        thumbnail_cache_directory=thumbnail_cache_directory,
     )
     app = create_app(settings)
     client: FlaskClient = app.test_client()
@@ -185,5 +183,7 @@ def test_media_thumbnail_serves_cached_png(tmp_path: Path) -> None:
     assert response.status_code == 200
     assert response.mimetype == "image/png"
     assert len(response.data) > 0
-    assert len(list(thumbnail_cache_directory.glob("**/*.png"))) == 1
+    thumbnail_cache_dir = review_directory / ".thumbnails"
+    assert thumbnail_cache_dir.exists()
+    assert len(list(thumbnail_cache_dir.glob("**/*.png"))) == 1
 

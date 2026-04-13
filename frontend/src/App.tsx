@@ -164,6 +164,19 @@ function App(): ReactElement {
       if (event.key === "ArrowLeft") {
         const nextIndex = activeReviewIndex === 0 ? displayedItems.length - 1 : activeReviewIndex - 1;
         setActiveReviewPath(displayedItems[nextIndex]?.path ?? null);
+        return;
+      }
+      if (event.key.toLowerCase() === "d" || event.key.toLowerCase() === "t") {
+        void handleMediaAction(activeReviewItem.path, "trash");
+        return;
+      }
+      if (event.key.toLowerCase() === "s") {
+        void handleMediaAction(activeReviewItem.path, "seen");
+        return;
+      }
+      if (event.key.toLowerCase() === "f" || event.key.toLowerCase() === "l") {
+        void handleMediaAction(activeReviewItem.path, "lock");
+        return;
       }
     };
 

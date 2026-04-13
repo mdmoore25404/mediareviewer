@@ -2,6 +2,7 @@
 
 import hashlib
 import os
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -19,16 +20,26 @@ class ThumbnailResult:
 
 
 class ThumbnailCacheService:
-    """Find or create cached thumbnails for supported media files."""
+    """Find or create cached thumbnails for supported media files.
+    
+    Thumbnails are stored within each mounted review path at .thumbnails directory
+    to enable different tool instances to share the cache and benefit from
+    local-only thumbnail storage.
+    """
 
-    def __init__(self, cache_root: Path) -> None:
-        self._cache_root = cache_root.expanduser()
-
-    def ensure_thumbnail(self, media_path: Path, size: int) -> ThumbnailResult:
-        """Return a cached thumbnail path, generating it on disk when needed."""
+    def ensure_thumbnail(self, media_path: Path, review_path: Path, size: int) -> ThumbnailResult:
+        """Return a cached thumbnail path, generating it on disk when needed.
+        
+        Args:
+            media_path: The media file to generate a thumbnail for.
+            review_path: The root of the mounted review folder.
+            size: The desired thumbnail size in pixels.
+        """
 
         normalized_path = media_path.expanduser().resolve()
-        thumbnail_path = self._thumbnail_path_for_media(normalized_path, size)
+        normalized_review = review_path.expanduser().resolve()
+        cache_root = normalized_review / ".thumbnails"
+        thumbnail_path = self._thumbnail_path_for_media(normalized_path, cache_root, size)
         if self._is_current_thumbnail(thumbnail_path, normalized_path):
             return ThumbnailResult(file_path=thumbnail_path, was_generated=False)
 
@@ -36,16 +47,41 @@ class ThumbnailCacheService:
         media_type = self._detect_media_type(normalized_path)
         if media_type == "image":
             self._generate_image_thumbnail(normalized_path, thumbnail_path, size)
+        elif media_type == "video":
+            success = self._generate_video_thumbnail_ffmpeg(normalized_path, thumbnail_path, size)
+            if not success:
+                self._generate_placeholder_thumbnail(
+                    normalized_path, thumbnail_path, size, media_type
+                )
         else:
-            self._generate_placeholder_thumbnail(normalized_path, thumbnail_path, size, media_type)
+            self._generate_placeholder_thumbnail(
+                normalized_path, thumbnail_path, size, media_type
+            )
         return ThumbnailResult(file_path=thumbnail_path, was_generated=True)
 
-    def _thumbnail_path_for_media(self, media_path: Path, size: int) -> Path:
+    def delete_thumbnail(self, media_path: Path, review_path: Path) -> None:
+        """Remove cached thumbnails for a media file.
+        
+        Args:
+            media_path: The media file to delete thumbnails for.
+            review_path: The root of the mounted review folder.
+        """
+        normalized_path = media_path.expanduser().resolve()
+        normalized_review = review_path.expanduser().resolve()
+        cache_root = normalized_review / ".thumbnails"
+        for size in [128, 256, 512]:
+            thumbnail_path = self._thumbnail_path_for_media(normalized_path, cache_root, size)
+            if thumbnail_path.exists():
+                thumbnail_path.unlink()
+
+
+
+    def _thumbnail_path_for_media(self, media_path: Path, cache_root: Path, size: int) -> Path:
         cache_dir_name = "large" if size > 128 else "normal"
         media_uri = media_path.as_uri()
         digest = hashlib.md5(media_uri.encode("utf-8"), usedforsecurity=False).hexdigest()
         file_name = f"{digest}.png"
-        return self._cache_root / cache_dir_name / file_name
+        return cache_root / cache_dir_name / file_name
 
     def _is_current_thumbnail(self, thumbnail_path: Path, media_path: Path) -> bool:
         if not thumbnail_path.exists():
@@ -72,6 +108,42 @@ class ThumbnailCacheService:
                 self._save_thumbnail_png(canvas, thumbnail_path, media_path)
         except (OSError, UnidentifiedImageError):
             self._generate_placeholder_thumbnail(media_path, thumbnail_path, size, "image")
+
+    def _generate_video_thumbnail_ffmpeg(
+        self,
+        media_path: Path,
+        thumbnail_path: Path,
+        size: int,
+    ) -> bool:
+        """Extract a frame from a video using ffmpeg. Returns True if successful."""
+        try:
+            temp_frame = thumbnail_path.parent / f"{thumbnail_path.stem}_frame.jpg"
+            subprocess.run(
+                [
+                    "ffmpeg",
+                    "-i",
+                    str(media_path),
+                    "-ss",
+                    "00:00:02",
+                    "-vframes",
+                    "1",
+                    "-vf",
+                    f"scale={size}:{size}:force_original_aspect_ratio=decrease,pad={size}:{size}:(ow-iw)/2:(oh-ih)/2:color=black",
+                    str(temp_frame),
+                ],
+                check=True,
+                capture_output=True,
+                timeout=10,
+            )
+            with Image.open(temp_frame) as frame:
+                canvas = Image.new("RGB", (size, size), color=(0, 0, 0))
+                canvas.paste(frame, ((size - frame.width) // 2, (size - frame.height) // 2))
+                self._save_thumbnail_png(canvas, thumbnail_path, media_path)
+            temp_frame.unlink()
+            return True
+        except (subprocess.CalledProcessError, FileNotFoundError, OSError):
+            return False
+
 
     def _generate_placeholder_thumbnail(
         self,

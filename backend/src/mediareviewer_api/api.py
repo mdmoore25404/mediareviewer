@@ -123,7 +123,7 @@ def get_media_items() -> Response:
     scan_result = media_scanner.scan(root_path=requested_path, limit=limit)
     items_payload: list[dict[str, object]] = []
     for item in scan_result.items:
-        thumbnail_cache.ensure_thumbnail(Path(item.path), size=256)
+        thumbnail_cache.ensure_thumbnail(Path(item.path), requested_path, size=256)
         item_payload = item.to_payload()
         item_payload["thumbnailUrl"] = _build_media_thumbnail_url(item.path, 256)
         items_payload.append(item_payload)
@@ -190,7 +190,18 @@ def get_media_thumbnail() -> Response:
     if not _is_under_known_path(media_path, config.known_paths):
         return jsonify({"error": "Path is not under a configured review path."}), 403
 
-    thumbnail = thumbnail_cache.ensure_thumbnail(media_path, size=size)
+    review_path = next(
+        (
+            path
+            for path in config.known_paths
+            if media_path == path or str(media_path).startswith(str(path / ""))
+        ),
+        None,
+    )
+    if not review_path:
+        return jsonify({"error": "Could not determine review path for media file."}), 400
+
+    thumbnail = thumbnail_cache.ensure_thumbnail(media_path, review_path, size=size)
     return send_file(thumbnail.file_path, mimetype="image/png", conditional=True)
 
 
@@ -205,6 +216,10 @@ def post_media_action() -> Response:
     action_service = cast(
         CompanionActionService,
         current_app.extensions["mediareviewer.companion_actions"],
+    )
+    thumbnail_cache = cast(
+        ThumbnailCacheService,
+        current_app.extensions["mediareviewer.thumbnail_cache"],
     )
 
     request_body = request.get_json(silent=True)
@@ -227,6 +242,19 @@ def post_media_action() -> Response:
         return jsonify({"error": "Path is not under a configured review path."}), 403
 
     status = cast(CompanionStatus, action_service.apply(media_path=media_path, action=action))
+
+    if action == "trash":
+        review_path = next(
+            (
+                path
+                for path in config.known_paths
+                if media_path == path or str(media_path).startswith(str(path / ""))
+            ),
+            None,
+        )
+        if review_path:
+            thumbnail_cache.delete_thumbnail(media_path, review_path)
+
     payload = {
         "path": str(media_path),
         "action": action,

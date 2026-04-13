@@ -25,5 +25,11 @@
   - implemented fullscreen review mode with prev/next navigation and keyboard controls.
   - added swipe/touch navigation in fullscreen review mode.
   - fixed `dev.sh restart` so frontend/backend ports are actually released and rebound cleanly.
+- completed in latest request:
+  - installed ffmpeg and ffmpegthumbnailer packages for video frame extraction.
+  - moved thumbnail cache from centralized locations to mounted folder level (`.thumbnails` at root of each review path) for multi-instance sharing.
+  - integrated ffmpeg-based video frame extraction for real video thumbnails with graceful fallback to placeholders.
+  - added thumbnail deletion when media items are marked as trashed for cache consistency.
+  - added fullscreen review mode keyboard shortcuts: D/T for trash, S for seen, F/L for lock.
+  - validated all changes with ruff lint, pytest backend tests, and vitest frontend tests.
 - next target:
-  - add deletion queue endpoints and the related frontend job status UI.
