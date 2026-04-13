@@ -1,0 +1,46 @@
+# Media Reviewer – single-container compose
+#
+# Config mount: ~/.mediareviewer/config.yaml → /data/config.yaml
+# Media mount:  update the `volumes` section under `mediareviewer` to mount
+#               the directories you want to review.
+#
+# Quick start:
+#   docker compose up --build
+#
+# Access the app at  http://localhost:8080
+
+services:
+  mediareviewer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: mediareviewer:latest
+    # Platform note: the ubuntu:24.04 base provides native images for both
+    # linux/amd64 (x86_64) and linux/arm64 (Apple Silicon M-series, RPi 4/5).
+    # To cross-build both at once:
+    #   docker buildx build --platform linux/amd64,linux/arm64 -t mediareviewer:latest .
+    ports:
+      - "8080:8080"
+    volumes:
+      # ── Required: user config & state ────────────────────────────────────
+      # Mounts ~/.mediareviewer/ as /data so the container reads config.yaml
+      # and writes thumbnails + state files to your home directory.
+      - type: bind
+        source: ${HOME}/.mediareviewer
+        target: /data
+
+      # ── Optional: media directories to review ────────────────────────────
+      # Add one entry per root path you want to scan.  Use read-only mounts
+      # unless you need the app to physically delete trashed files.
+      # Example (uncomment and adjust):
+      # - type: bind
+      #   source: /mnt/trailcam
+      #   target: /mnt/trailcam
+      #   read_only: false
+
+    environment:
+      MEDIAREVIEWER_HOST: "0.0.0.0"
+      MEDIAREVIEWER_PORT: "8080"
+      MEDIAREVIEWER_STATE_DIR: "/data"
+      MEDIAREVIEWER_STATIC_DIR: "/app/static"
+    restart: unless-stopped

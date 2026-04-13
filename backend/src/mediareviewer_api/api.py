@@ -408,6 +408,58 @@ def post_media_action() -> Response:
     return jsonify(payload)
 
 
+@api_blueprint.post("/empty-trash")
+def post_empty_trash() -> Response:
+    """Permanently delete all media files (and their companions) marked as trashed.
+
+    Iterates over every configured known review path, finds files with a ``.trash``
+    companion, removes the media file and all its companion files, and purges the
+    cached thumbnail.  Locked items are skipped even if they are also trashed.
+
+    Returns a ``deleted`` count and a list of paths that could not be removed.
+    """
+
+    config_store = cast(
+        ReviewConfigStore,
+        current_app.extensions["mediareviewer.review_config_store"],
+    )
+    thumbnail_cache = cast(
+        ThumbnailCacheService,
+        current_app.extensions["mediareviewer.thumbnail_cache"],
+    )
+
+    config = config_store.load()
+    deleted: list[str] = []
+    errors: list[str] = []
+
+    for review_path in config.known_paths:
+        if not review_path.is_dir():
+            continue
+        for candidate in sorted(review_path.rglob("*")):
+            if not candidate.is_file():
+                continue
+            trash_marker = candidate.with_suffix(f"{candidate.suffix}.trash")
+            if not trash_marker.exists():
+                continue
+            lock_marker = candidate.with_suffix(f"{candidate.suffix}.lock")
+            if lock_marker.exists():
+                # Locked items are never deleted automatically
+                continue
+            # Remove the media file, all companion files, and the thumbnail
+            try:
+                for companion_suffix in (".lock", ".trash", ".seen"):
+                    companion = candidate.with_suffix(f"{candidate.suffix}{companion_suffix}")
+                    if companion.exists():
+                        companion.unlink()
+                thumbnail_cache.delete_thumbnail(candidate, review_path)
+                candidate.unlink()
+                deleted.append(str(candidate))
+            except OSError as exc:
+                errors.append(f"{candidate}: {exc.strerror}")
+
+    return jsonify({"deleted": len(deleted), "paths": deleted, "errors": errors})
+
+
 def _build_media_thumbnail_url(media_path: str, size: int) -> str:
     """Build a relative thumbnail route for a media item payload."""
 

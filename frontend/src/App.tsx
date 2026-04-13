@@ -5,6 +5,7 @@ import {
   applyMediaAction,
   buildMediaFileUrl,
   buildMediaThumbnailUrl,
+  emptyTrash,
   fetchHealth,
   fetchReviewPaths,
   streamMediaItems,
@@ -75,6 +76,7 @@ function App(): ReactElement {
   const scanAbortRef = useRef<AbortController | null>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
   const [isSubmittingPath, setIsSubmittingPath] = useState<boolean>(false);
+  const [isEmptyingTrash, setIsEmptyingTrash] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [activeReviewPath, setActiveReviewPath] = useState<string | null>(null);
@@ -334,6 +336,30 @@ function App(): ReactElement {
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Unable to apply media action.";
       setErrorMessage(message);
+    }
+  };
+
+  const handleEmptyTrash = async (): Promise<void> => {
+    setIsEmptyingTrash(true);
+    setStatusMessage(null);
+    setErrorMessage(null);
+    try {
+      const payload = await emptyTrash();
+      // Remove permanently deleted items from local state
+      const deletedSet = new Set(payload.paths);
+      setMediaItems((prev) => prev.filter((item) => !deletedSet.has(item.path)));
+      const msg = payload.deleted === 1
+        ? "Permanently deleted 1 trashed item."
+        : `Permanently deleted ${payload.deleted} trashed items.`;
+      setStatusMessage(msg);
+      if (payload.errors.length > 0) {
+        setErrorMessage(`Some items could not be deleted: ${payload.errors.join("; ")}`);
+      }
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Unable to empty trash.";
+      setErrorMessage(message);
+    } finally {
+      setIsEmptyingTrash(false);
     }
   };
 
@@ -616,6 +642,17 @@ function App(): ReactElement {
                   >
                     <i className="fa-solid fa-magnifying-glass me-2" aria-hidden="true" />
                     {isScanLoading ? "Scanning..." : "Scan media"}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-outline-danger"
+                    onClick={() => {
+                      void handleEmptyTrash();
+                    }}
+                    disabled={isEmptyingTrash}
+                  >
+                    <i className="fa-solid fa-trash me-2" aria-hidden="true" />
+                    {isEmptyingTrash ? "Emptying..." : "Empty trash"}
                   </button>
                 </div>
 

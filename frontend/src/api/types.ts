@@ -67,6 +67,12 @@ export interface MediaActionResponse {
   status: MediaStatus;
 }
 
+export interface EmptyTrashResponse {
+  deleted: number;
+  paths: string[];
+  errors: string[];
+}
+
 export interface FolderInfo {
   path: string;
   name: string;

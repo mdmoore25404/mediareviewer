@@ -1,5 +1,6 @@
 import type {
   AddReviewPathResponse,
+  EmptyTrashResponse,
   FolderFilesResponse,
   FoldersResponse,
   HealthResponse,
@@ -139,6 +140,15 @@ export function buildMediaFileUrl(path: string): string {
 export function buildMediaThumbnailUrl(path: string, size: number): string {
   const search = new URLSearchParams({ path, size: String(size) });
   return `/api/media-thumbnail?${search.toString()}`;
+}
+
+/** Permanently delete all trashed media items across all known review paths. */
+export async function emptyTrash(): Promise<EmptyTrashResponse> {
+  const response = await fetch("/api/empty-trash", {
+    method: "POST",
+    headers: { Accept: "application/json" },
+  });
+  return parseJsonResponse<EmptyTrashResponse>(response);
 }
 
 /** Fetch immediate child folders under a parent directory. */

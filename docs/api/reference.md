@@ -259,6 +259,31 @@ Applies a companion-file state action to a media file under a known review path.
 - `400`: request body invalid, unsupported action, or media path missing.
 - `403`: media path is outside configured known review paths.
 
+## POST /api/empty-trash
+
+Permanently deletes all media files (and their companion files) that are marked as trashed across all configured known review paths.  Locked-and-trashed items are **skipped** to protect them from accidental deletion.
+
+### Request
+
+No request body required.
+
+### Success Response
+
+```json
+{
+  "deleted": 2,
+  "paths": [
+    "/home/michaelmoore/trailcam/DCIM/100MEDIA/clip001.mp4",
+    "/home/michaelmoore/trailcam/DCIM/100MEDIA/clip002.mp4"
+  ],
+  "errors": []
+}
+```
+
+### Errors
+
+- `200` with non-empty `errors` array: one or more files could not be removed (permissions, concurrent modification, etc.). Successfully-deleted items are still returned in `paths`.
+
 ## GET /api/media-file
 
 Streams an image or video file under a configured review path for fullscreen review mode.

@@ -1,6 +1,9 @@
 """Application factory and local entry point for the Media Reviewer API."""
 
-from flask import Flask
+import os
+from pathlib import Path
+
+from flask import Flask, send_from_directory
 
 from mediareviewer_api.api import api_blueprint
 from mediareviewer_api.config import AppSettings
@@ -15,7 +18,13 @@ def create_app(settings: AppSettings | None = None) -> Flask:
     """Create and configure the Flask application."""
 
     resolved_settings = settings or AppSettings.from_env()
-    app = Flask(__name__)
+
+    # Optional: serve a pre-built React frontend from the same process.
+    # Set MEDIAREVIEWER_STATIC_DIR to the Vite build output directory.
+    static_dir_env = os.getenv("MEDIAREVIEWER_STATIC_DIR", "")
+    static_dir: Path | None = Path(static_dir_env) if static_dir_env else None
+
+    app = Flask(__name__, static_folder=None)
     app.config["MEDIAREVIEWER_SETTINGS"] = resolved_settings
     if resolved_settings.trusted_hosts:
         app.config["TRUSTED_HOSTS"] = list(resolved_settings.trusted_hosts)
@@ -29,6 +38,17 @@ def create_app(settings: AppSettings | None = None) -> Flask:
     app.extensions["mediareviewer.companion_actions"] = CompanionActionService()
     app.extensions["mediareviewer.thumbnail_cache"] = ThumbnailCacheService()
     app.register_blueprint(api_blueprint)
+
+    if static_dir and static_dir.is_dir():
+        @app.route("/", defaults={"path": ""})
+        @app.route("/<path:path>")
+        def serve_frontend(path: str) -> object:
+            """Serve the pre-built React SPA; fall back to index.html for client-side routing."""
+            target = static_dir / path
+            if path and target.exists() and target.is_file():
+                return send_from_directory(str(static_dir), path)
+            return send_from_directory(str(static_dir), "index.html")
+
     return app
 
 
