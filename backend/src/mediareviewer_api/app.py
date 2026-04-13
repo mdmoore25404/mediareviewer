@@ -8,6 +8,7 @@ from mediareviewer_api.services.companion_actions import CompanionActionService
 from mediareviewer_api.services.deletion_queue import DeletionQueue
 from mediareviewer_api.services.media_scanner import MediaScanner
 from mediareviewer_api.services.review_config_store import ReviewConfigStore
+from mediareviewer_api.services.thumbnail_cache import ThumbnailCacheService
 
 
 def create_app(settings: AppSettings | None = None) -> Flask:
@@ -26,6 +27,9 @@ def create_app(settings: AppSettings | None = None) -> Flask:
     )
     app.extensions["mediareviewer.media_scanner"] = MediaScanner()
     app.extensions["mediareviewer.companion_actions"] = CompanionActionService()
+    app.extensions["mediareviewer.thumbnail_cache"] = ThumbnailCacheService(
+        cache_root=resolved_settings.thumbnail_cache_directory,
+    )
     app.register_blueprint(api_blueprint)
     return app
 

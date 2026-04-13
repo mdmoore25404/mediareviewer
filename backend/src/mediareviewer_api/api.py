@@ -3,6 +3,7 @@
 from dataclasses import asdict
 from pathlib import Path
 from typing import cast
+from urllib.parse import urlencode
 
 from flask import Blueprint, Response, current_app, jsonify, request, send_file
 
@@ -11,6 +12,7 @@ from mediareviewer_api.services.companion_actions import CompanionActionService,
 from mediareviewer_api.services.deletion_queue import DeletionQueue, DeletionQueueSnapshot
 from mediareviewer_api.services.media_scanner import MediaScanner
 from mediareviewer_api.services.review_config_store import ReviewConfigStore
+from mediareviewer_api.services.thumbnail_cache import ThumbnailCacheService
 
 api_blueprint = Blueprint("api", __name__, url_prefix="/api")
 
@@ -100,6 +102,10 @@ def get_media_items() -> Response:
         MediaScanner,
         current_app.extensions["mediareviewer.media_scanner"],
     )
+    thumbnail_cache = cast(
+        ThumbnailCacheService,
+        current_app.extensions["mediareviewer.thumbnail_cache"],
+    )
 
     raw_path = request.args.get("path", type=str)
     if not raw_path:
@@ -115,11 +121,18 @@ def get_media_items() -> Response:
         return jsonify({"error": "Path is not configured as a known review path."}), 403
 
     scan_result = media_scanner.scan(root_path=requested_path, limit=limit)
+    items_payload: list[dict[str, object]] = []
+    for item in scan_result.items:
+        thumbnail_cache.ensure_thumbnail(Path(item.path), size=256)
+        item_payload = item.to_payload()
+        item_payload["thumbnailUrl"] = _build_media_thumbnail_url(item.path, 256)
+        items_payload.append(item_payload)
+
     payload = {
         "path": str(requested_path),
         "count": len(scan_result.items),
         "ignoredCount": scan_result.ignored_count,
-        "items": [item.to_payload() for item in scan_result.items],
+        "items": items_payload,
     }
     return jsonify(payload)
 
@@ -146,6 +159,39 @@ def get_media_file() -> Response:
         return jsonify({"error": "Path is not under a configured review path."}), 403
 
     return send_file(media_path, conditional=True)
+
+
+@api_blueprint.get("/media-thumbnail")
+def get_media_thumbnail() -> Response:
+    """Serve a cached thumbnail from disk, generating it if needed."""
+
+    config_store = cast(
+        ReviewConfigStore,
+        current_app.extensions["mediareviewer.review_config_store"],
+    )
+    thumbnail_cache = cast(
+        ThumbnailCacheService,
+        current_app.extensions["mediareviewer.thumbnail_cache"],
+    )
+
+    raw_path = request.args.get("path", type=str)
+    if not raw_path:
+        return jsonify({"error": "Query parameter 'path' is required."}), 400
+
+    size = request.args.get("size", default=256, type=int)
+    if size <= 0 or size > 1024:
+        return jsonify({"error": "Query parameter 'size' must be between 1 and 1024."}), 400
+
+    media_path = Path(raw_path).expanduser().resolve()
+    if not media_path.exists() or not media_path.is_file():
+        return jsonify({"error": "Path must be an existing media file."}), 400
+
+    config = config_store.load()
+    if not _is_under_known_path(media_path, config.known_paths):
+        return jsonify({"error": "Path is not under a configured review path."}), 403
+
+    thumbnail = thumbnail_cache.ensure_thumbnail(media_path, size=size)
+    return send_file(thumbnail.file_path, mimetype="image/png", conditional=True)
 
 
 @api_blueprint.post("/media-actions")
@@ -191,6 +237,12 @@ def post_media_action() -> Response:
         },
     }
     return jsonify(payload)
+
+
+def _build_media_thumbnail_url(media_path: str, size: int) -> str:
+    """Build a relative thumbnail route for a media item payload."""
+
+    return f"/api/media-thumbnail?{urlencode({'path': media_path, 'size': size})}"
 
 
 def _is_hidden_path(candidate: Path, hidden_paths: tuple[Path, ...]) -> bool:

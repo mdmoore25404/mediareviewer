@@ -1,6 +1,7 @@
 """Typed application configuration for the Media Reviewer API."""
 
 import os
+import platform
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -24,6 +25,16 @@ def _parse_hidden_paths(raw_value: str | None) -> tuple[Path, ...]:
 
     parsed_paths = [Path(item).expanduser().resolve() for item in raw_value.split(":") if item]
     return tuple(parsed_paths)
+
+
+def _default_thumbnail_cache_directory(state_directory: Path) -> Path:
+    """Return the default on-disk thumbnail cache root for this platform."""
+
+    system_name = platform.system()
+    if system_name == "Linux":
+        xdg_cache_home = Path(os.getenv("XDG_CACHE_HOME", str(Path.home() / ".cache"))).expanduser()
+        return xdg_cache_home / "thumbnails"
+    return state_directory / "thumbnails"
 
 
 def _load_server_settings_from_yaml(
@@ -66,6 +77,9 @@ class AppSettings:
     )
     trusted_hosts: tuple[str, ...] = ()
     deletion_workers: int = 2
+    thumbnail_cache_directory: Path = field(
+        default_factory=lambda: _default_thumbnail_cache_directory(Path.home() / ".mediareviewer"),
+    )
     config_file_name: str = "config.yaml"
 
     @property
@@ -92,4 +106,10 @@ class AppSettings:
             hidden_picker_paths=_parse_hidden_paths(os.getenv("MEDIAREVIEWER_HIDDEN_PATHS")),
             trusted_hosts=yaml_trusted_hosts,
             deletion_workers=int(os.getenv("MEDIAREVIEWER_DELETION_WORKERS", "2")),
+            thumbnail_cache_directory=Path(
+                os.getenv(
+                    "MEDIAREVIEWER_THUMBNAIL_CACHE_DIR",
+                    str(_default_thumbnail_cache_directory(state_directory)),
+                ),
+            ).expanduser(),
         )

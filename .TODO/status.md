@@ -21,6 +21,7 @@
   - added committed backend `requirements.txt` and `requirements-dev.txt` files.
   - added YAML-configurable trusted hosts for Flask and Vite dev access beyond localhost.
   - added image/video thumbnails to grid and list views using a protected media streaming endpoint.
+  - added disk-backed cached thumbnail generation, with freedesktop-style Linux cache layout and app-managed fallback on macOS and Windows.
   - implemented fullscreen review mode with prev/next navigation and keyboard controls.
   - added swipe/touch navigation in fullscreen review mode.
   - fixed `dev.sh restart` so frontend/backend ports are actually released and rebound cleanly.

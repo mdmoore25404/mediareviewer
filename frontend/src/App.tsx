@@ -4,6 +4,7 @@ import {
   addReviewPath,
   applyMediaAction,
   buildMediaFileUrl,
+  buildMediaThumbnailUrl,
   fetchHealth,
   fetchMediaItems,
   fetchReviewPaths,
@@ -296,16 +297,8 @@ function App(): ReactElement {
   };
 
   const renderMediaPreview = (item: MediaItem, className: string): ReactElement => {
-    const mediaUrl = buildMediaFileUrl(item.path);
-    if (item.mediaType === "image") {
-      return <img className={className} src={mediaUrl} alt={item.name} loading="lazy" />;
-    }
-
-    return (
-      <video className={className} src={mediaUrl} muted playsInline preload="metadata">
-        <track kind="captions" />
-      </video>
-    );
+    const thumbnailUrl = item.thumbnailUrl || buildMediaThumbnailUrl(item.path, 256);
+    return <img className={className} src={thumbnailUrl} alt={item.name} loading="lazy" />;
   };
 
   return (

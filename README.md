@@ -6,7 +6,8 @@ The current prototype includes:
 
 - known review path management
 - recursive media scanning with non-media filtering
-- grid and list views with image/video previews
+- disk-backed thumbnail generation and caching for scan results
+- grid and list views with cached previews
 - fullscreen review mode opened from a media card with keyboard and swipe/touch navigation
 - lock, trash, seen, and unseen companion-file actions
 
@@ -74,6 +75,15 @@ These hostnames are applied to:
 
 - Flask trusted host handling
 - Vite dev server allowed hosts
+
+## Thumbnail cache behavior
+
+Media Reviewer now generates and reuses thumbnails on disk while scanning and browsing.
+
+- On Linux, the default cache root is `~/.cache/thumbnails`, using the freedesktop thumbnail directory layout so existing file-manager thumbnails can be reused when present and generated thumbnails follow the same convention.
+- On macOS and Windows, Media Reviewer uses its own cache directory under `~/.mediareviewer/thumbnails` by default because Finder and Explorer thumbnail stores are not public, stable interoperability targets.
+- You can override the cache root with `MEDIAREVIEWER_THUMBNAIL_CACHE_DIR`.
+- Fullscreen review still streams the original media file; cached thumbnails are used for grid and list previews.
 
 ## Architecture Portability
 

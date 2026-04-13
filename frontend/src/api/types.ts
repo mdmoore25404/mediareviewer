@@ -44,6 +44,7 @@ export interface MediaItem {
   path: string;
   name: string;
   mediaType: "image" | "video";
+  thumbnailUrl: string;
   sizeBytes: number;
   modifiedAt: string;
   createdAt: string;

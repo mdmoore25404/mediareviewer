@@ -95,6 +95,7 @@ Scans a known review path recursively and returns image/video files only. Compan
       "path": "/home/michaelmoore/trailcam/DCIM/100MEDIA/frame001.jpg",
       "name": "frame001.jpg",
       "mediaType": "image",
+      "thumbnailUrl": "/api/media-thumbnail?path=%2Fhome%2Fmichaelmoore%2Ftrailcam%2FDCIM%2F100MEDIA%2Fframe001.jpg&size=256",
       "sizeBytes": 154323,
       "modifiedAt": "2026-04-12T21:50:19.123456+00:00",
       "createdAt": "2026-04-12T21:50:19.123456+00:00",
@@ -111,6 +112,12 @@ Scans a known review path recursively and returns image/video files only. Compan
   ]
 }
 ```
+
+### Notes
+
+- Each item includes `thumbnailUrl`, which points at the disk-backed thumbnail cache.
+- On Linux, generated thumbnails use the freedesktop thumbnail cache layout under `~/.cache/thumbnails` by default.
+- On macOS and Windows, thumbnails are cached under the Media Reviewer state directory unless `MEDIAREVIEWER_THUMBNAIL_CACHE_DIR` overrides the location.
 
 ### Errors
 
@@ -158,7 +165,7 @@ Applies a companion-file state action to a media file under a known review path.
 
 ## GET /api/media-file
 
-Streams an image or video file under a configured review path for thumbnail display and fullscreen review mode.
+Streams an image or video file under a configured review path for fullscreen review mode.
 
 ### Query Parameters
 
@@ -166,11 +173,31 @@ Streams an image or video file under a configured review path for thumbnail disp
 
 ### Behavior
 
-- Image files can be used directly in `<img>` previews.
-- Video files can be used directly in `<video>` previews and fullscreen review playback.
+- Image and video files can be streamed directly for fullscreen review playback.
 - Access is denied for files outside configured review paths.
 
 ### Errors
 
 - `400`: missing `path` or file does not exist.
+- `403`: file is outside configured known review paths.
+
+## GET /api/media-thumbnail
+
+Serves a PNG thumbnail from the on-disk cache, generating it if needed.
+
+### Query Parameters
+
+- `path` (required): absolute media file path under a configured known review root.
+- `size` (optional): integer from `1` to `1024`, default `256`.
+
+### Behavior
+
+- Image files are resized into a square PNG thumbnail.
+- Video files currently receive a generated placeholder thumbnail when no system thumbnail is already available.
+- On Linux, the cache location follows the freedesktop thumbnail directory convention by default.
+- On macOS and Windows, Media Reviewer uses its own cache directory because native file-explorer thumbnail caches are not public, stable integration points.
+
+### Errors
+
+- `400`: missing `path`, invalid `size`, or file does not exist.
 - `403`: file is outside configured known review paths.

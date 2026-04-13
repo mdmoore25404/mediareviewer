@@ -60,11 +60,13 @@ def test_media_items_returns_supported_files_and_status(tmp_path: Path) -> None:
     assert image_item["mediaType"] == "image"
     assert image_item["status"] == {"locked": False, "trashed": False, "seen": True}
     assert image_item["metadata"] == {"width": 12, "height": 8}
+    assert image_item["thumbnailUrl"].startswith("/api/media-thumbnail?")
 
     video_item = next(item for item in payload["items"] if item["name"] == "clip001.mp4")
     assert video_item["mediaType"] == "video"
     assert video_item["status"] == {"locked": True, "trashed": False, "seen": False}
     assert video_item["metadata"] == {"width": None, "height": None}
+    assert video_item["thumbnailUrl"].startswith("/api/media-thumbnail?")
 
 
 def test_media_items_requires_known_path(tmp_path: Path) -> None:
@@ -148,4 +150,40 @@ def test_media_file_rejects_unknown_path(tmp_path: Path) -> None:
 
     assert response.status_code == 403
     assert response.get_json() == {"error": "Path is not under a configured review path."}
+
+
+def test_media_thumbnail_serves_cached_png(tmp_path: Path) -> None:
+    """The thumbnail endpoint should generate and serve a cached PNG on disk."""
+
+    state_directory = tmp_path / "state"
+    review_directory = tmp_path / "trailcam"
+    review_directory.mkdir(parents=True)
+    image_path = review_directory / "frame001.jpg"
+    Image.new("RGB", (64, 48), color=(32, 64, 96)).save(image_path)
+
+    state_directory.mkdir(parents=True)
+    (state_directory / "config.yaml").write_text(
+        "known_paths:\n  - " + str(review_directory.resolve()) + "\n",
+        encoding="utf-8",
+    )
+
+    thumbnail_cache_directory = tmp_path / "thumbnail-cache"
+    settings = AppSettings(
+        state_directory=state_directory,
+        hidden_picker_paths=(),
+        deletion_workers=1,
+        thumbnail_cache_directory=thumbnail_cache_directory,
+    )
+    app = create_app(settings)
+    client: FlaskClient = app.test_client()
+
+    response = client.get(
+        "/api/media-thumbnail",
+        query_string={"path": str(image_path.resolve()), "size": "256"},
+    )
+
+    assert response.status_code == 200
+    assert response.mimetype == "image/png"
+    assert len(response.data) > 0
+    assert len(list(thumbnail_cache_directory.glob("**/*.png"))) == 1
 
