@@ -1,0 +1,91 @@
+:root {
+  color: #132238;
+  background:
+    radial-gradient(circle at top left, rgba(245, 171, 53, 0.28), transparent 28%),
+    radial-gradient(circle at top right, rgba(42, 122, 226, 0.24), transparent 25%),
+    linear-gradient(180deg, #f9f4ea 0%, #eef3f7 100%);
+  font-family: "Public Sans", "Segoe UI", sans-serif;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+.app-shell {
+  min-height: 100vh;
+}
+
+.hero-panel {
+  padding-top: 4rem;
+  padding-bottom: 4rem;
+}
+
+.status-card {
+  border: 1px solid rgba(19, 34, 56, 0.08);
+  border-radius: 1.75rem;
+  background: rgba(255, 255, 255, 0.92);
+  padding: 2rem;
+  backdrop-filter: blur(12px);
+}
+
+.eyebrow {
+  margin-bottom: 0.5rem;
+  color: #aa5a12;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.summary-pill {
+  border-radius: 999px;
+  background: #132238;
+  color: #f9f4ea;
+  padding: 0.75rem 1rem;
+  font-weight: 600;
+}
+
+.metric-card {
+  height: 100%;
+  border-radius: 1.25rem;
+  background: linear-gradient(180deg, #fff8ef 0%, #ffffff 100%);
+  padding: 1.25rem;
+  border: 1px solid rgba(170, 90, 18, 0.12);
+}
+
+.metric-label {
+  margin-bottom: 0.35rem;
+  color: #526173;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.metric-value {
+  margin: 0;
+  color: #132238;
+  font-size: 1.6rem;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.metric-value--small {
+  font-size: 1rem;
+}
+
+@media (max-width: 767px) {
+  .status-card {
+    padding: 1.5rem;
+  }
+
+  .hero-panel {
+    padding-top: 2rem;
+    padding-bottom: 2rem;
+  }
+}
