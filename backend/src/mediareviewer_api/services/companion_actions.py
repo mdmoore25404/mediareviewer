@@ -4,6 +4,10 @@ from dataclasses import dataclass
 from pathlib import Path
 
 
+class LockedItemError(ValueError):
+    """Raised when a protected action is attempted on a locked media item."""
+
+
 @dataclass(frozen=True, slots=True)
 class CompanionStatus:
     """State represented by companion files for a media item."""
@@ -30,9 +34,10 @@ class CompanionActionService:
         elif action == "unlock":
             self._remove_if_exists(lock_path)
         elif action == "trash":
+            if lock_path.exists():
+                raise LockedItemError("Cannot trash a locked item. Unlock it first.")
             self._touch(trash_path)
             self._touch(seen_path)
-            self._remove_if_exists(lock_path)
         elif action == "untrash":
             self._remove_if_exists(trash_path)
         elif action == "seen":

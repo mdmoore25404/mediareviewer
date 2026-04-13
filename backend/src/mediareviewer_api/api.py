@@ -9,7 +9,11 @@ from urllib.parse import urlencode
 from flask import Blueprint, Response, current_app, jsonify, request, send_file, stream_with_context
 
 from mediareviewer_api.config import AppSettings
-from mediareviewer_api.services.companion_actions import CompanionActionService, CompanionStatus
+from mediareviewer_api.services.companion_actions import (
+    CompanionActionService,
+    CompanionStatus,
+    LockedItemError,
+)
 from mediareviewer_api.services.deletion_queue import DeletionQueue, DeletionQueueSnapshot
 from mediareviewer_api.services.media_scanner import MediaScanner
 from mediareviewer_api.services.review_config_store import ReviewConfigStore
@@ -382,7 +386,10 @@ def post_media_action() -> Response:
     if not _is_under_known_path(media_path, config.known_paths):
         return jsonify({"error": "Path is not under a configured review path."}), 403
 
-    status = cast(CompanionStatus, action_service.apply(media_path=media_path, action=action))
+    try:
+        status = cast(CompanionStatus, action_service.apply(media_path=media_path, action=action))
+    except LockedItemError as exc:
+        return jsonify({"error": str(exc)}), 409
 
     if action == "trash":
         review_path = next(

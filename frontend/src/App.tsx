@@ -16,6 +16,11 @@ import { FolderBrowser } from "./FolderBrowser";
 type ViewMode = "grid" | "list";
 type StatusFilter = "all" | "locked" | "trashed" | "seen" | "unseen";
 type MediaFilter = "all" | "image" | "video";
+
+interface TrashLockedWarning {
+  item: MediaItem;
+  fromReview: boolean;
+}
 type SortOption = "modified-desc" | "modified-asc" | "size-desc" | "size-asc" | "name-asc";
 
 function sortMediaItems(items: MediaItem[], sortOption: SortOption): MediaItem[] {
@@ -85,6 +90,7 @@ function App(): ReactElement {
   const [isFolderBrowserOpen, setIsFolderBrowserOpen] = useState<boolean>(false);
   const [showVideoControls, setShowVideoControls] = useState<boolean>(false);
   const [showHelp, setShowHelp] = useState<boolean>(false);
+  const [trashLockedWarning, setTrashLockedWarning] = useState<TrashLockedWarning | null>(null);
 
   useEffect(() => {
     const abortController = new AbortController();
@@ -183,6 +189,8 @@ function App(): ReactElement {
       if (event.key.toLowerCase() === "d" || event.key.toLowerCase() === "t") {
         if (activeReviewItem.status.trashed) {
           void handleMediaAction(activeReviewItem.path, "untrash");
+        } else if (activeReviewItem.status.locked) {
+          setTrashLockedWarning({ item: activeReviewItem, fromReview: true });
         } else {
           void (async () => {
             await handleMediaAction(activeReviewItem.path, "trash");
@@ -380,8 +388,18 @@ function App(): ReactElement {
     }
   };
 
-  const openReviewMode = (itemPath: string): void => {
-    setActiveReviewPath(itemPath);
+  const handleUnlockAndTrash = async (): Promise<void> => {
+    if (!trashLockedWarning) return;
+    const { item, fromReview } = trashLockedWarning;
+    setTrashLockedWarning(null);
+    await handleMediaAction(item.path, "unlock");
+    await handleMediaAction(item.path, "trash");
+    if (fromReview) {
+      showNextReviewItem();
+    }
+  };
+
+  const openReviewMode = (itemPath: string): void => {    setActiveReviewPath(itemPath);
   };
 
   const handleCardKeyDown = (event: KeyboardEvent<HTMLElement>, itemPath: string): void => {
@@ -757,7 +775,11 @@ function App(): ReactElement {
                             type="button"
                             className="btn btn-sm btn-outline-danger"
                             onClick={() => {
-                              void handleMediaAction(item.path, "trash");
+                              if (item.status.locked) {
+                                setTrashLockedWarning({ item, fromReview: false });
+                              } else {
+                                void handleMediaAction(item.path, "trash");
+                              }
                             }}
                           >
                             Trash
@@ -962,6 +984,8 @@ function App(): ReactElement {
                     onClick={() => {
                       if (activeReviewItem.status.trashed) {
                         void handleMediaAction(activeReviewItem.path, "untrash");
+                      } else if (activeReviewItem.status.locked) {
+                        setTrashLockedWarning({ item: activeReviewItem, fromReview: true });
                       } else {
                         void (async () => {
                           await handleMediaAction(activeReviewItem.path, "trash");
@@ -989,6 +1013,46 @@ function App(): ReactElement {
                     {activeReviewItem.status.seen ? "Seen" : "Unseen"}
                   </button>
                 </div>
+              </div>
+            </div>
+          </div>
+        )}
+        {trashLockedWarning && (
+          <div
+            className="review-overlay"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Cannot trash locked item"
+            data-testid="trash-locked-warning"
+          >
+            <div className="trash-locked-dialog">
+              <h2 className="h5 mb-3">
+                <i className="fa-solid fa-lock me-2" aria-hidden="true" />
+                Cannot trash a locked item
+              </h2>
+              <p className="mb-4">
+                You cannot trash a locked item. You must unlock it to trash it.
+              </p>
+              <div className="d-flex gap-2 justify-content-end">
+                <button
+                  type="button"
+                  className="btn btn-outline-secondary"
+                  onClick={() => {
+                    setTrashLockedWarning(null);
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-danger"
+                  onClick={() => {
+                    void handleUnlockAndTrash();
+                  }}
+                >
+                  <i className="fa-solid fa-unlock me-2" aria-hidden="true" />
+                  Unlock &amp; Trash
+                </button>
               </div>
             </div>
           </div>
