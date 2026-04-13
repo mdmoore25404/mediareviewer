@@ -66,3 +66,23 @@ export interface MediaActionResponse {
   action: MediaAction;
   status: MediaStatus;
 }
+
+export interface FolderInfo {
+  path: string;
+  name: string;
+  has_children: boolean;
+}
+
+export interface FoldersResponse {
+  path: string;
+  folders: FolderInfo[];
+}
+
+export interface FolderFilesResponse {
+  path: string;
+  offset: number;
+  limit: number;
+  count: number;
+  ignoredCount: number;
+  items: MediaItem[];
+}

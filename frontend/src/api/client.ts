@@ -1,5 +1,7 @@
 import type {
   AddReviewPathResponse,
+  FolderFilesResponse,
+  FoldersResponse,
   HealthResponse,
   MediaAction,
   MediaActionResponse,
@@ -89,4 +91,37 @@ export function buildMediaFileUrl(path: string): string {
 export function buildMediaThumbnailUrl(path: string, size: number): string {
   const search = new URLSearchParams({ path, size: String(size) });
   return `/api/media-thumbnail?${search.toString()}`;
+}
+
+/** Fetch immediate child folders under a parent directory. */
+export async function fetchFolders(path: string, signal: AbortSignal): Promise<FoldersResponse> {
+  const search = new URLSearchParams({ path });
+  const response = await fetch(`/api/folders?${search.toString()}`, {
+    headers: {
+      Accept: "application/json",
+    },
+    signal,
+  });
+  return parseJsonResponse<FoldersResponse>(response);
+}
+
+/** Fetch paginated media files in a single folder. */
+export async function fetchFolderFiles(
+  path: string,
+  offset = 0,
+  limit = 100,
+  signal?: AbortSignal
+): Promise<FolderFilesResponse> {
+  const search = new URLSearchParams({
+    path,
+    offset: String(offset),
+    limit: String(limit),
+  });
+  const response = await fetch(`/api/folders/files?${search.toString()}`, {
+    headers: {
+      Accept: "application/json",
+    },
+    signal,
+  });
+  return parseJsonResponse<FolderFilesResponse>(response);
 }
