@@ -290,9 +290,8 @@ function App(): ReactElement {
     try {
       const payload = await addReviewPath(newPathInput.trim());
       setKnownPaths(payload.knownPaths);
-      if (!selectedPath && payload.knownPaths.length > 0) {
-        setSelectedPath(payload.knownPaths[0]);
-      }
+      // Always select the newly added path so Scan uses it immediately
+      setSelectedPath(payload.addedPath);
       setStatusMessage(`Added review path: ${payload.addedPath}`);
       setNewPathInput("");
     } catch (error: unknown) {
