@@ -26,3 +26,6 @@ This repository is the implementation workspace for Media Reviewer, a lightweigh
 - Frontend changes should stay compatible with `eslint`, `vitest`, and the TypeScript compiler.
 - API reference documentation must remain in Markdown with Jekyll front matter.
 - Avoid database dependencies. State is represented by filesystem companion files and user-level configuration under `~/.mediareviewer`.
+- Runtime support must remain portable across x86_64 and ARM64 (including Apple Silicon).
+- When adding low-level or native dependencies, document architecture impacts and compatibility notes.
+- Docker images must be planned for multi-arch manifests (`linux/amd64` and `linux/arm64`) using suitable official base images.

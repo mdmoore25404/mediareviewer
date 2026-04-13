@@ -7,6 +7,70 @@ BACKEND_PID_FILE="${DEV_DIR}/backend.pid"
 FRONTEND_PID_FILE="${DEV_DIR}/frontend.pid"
 BACKEND_LOG="${DEV_DIR}/backend.log"
 FRONTEND_LOG="${DEV_DIR}/frontend.log"
+USER_CONFIG_DIR="${HOME}/.mediareviewer"
+USER_CONFIG_FILE="${USER_CONFIG_DIR}/config.yaml"
+
+BACKEND_HOST="127.0.0.1"
+BACKEND_PORT="5000"
+FRONTEND_HOST="0.0.0.0"
+FRONTEND_PORT="5173"
+
+load_runtime_config() {
+  mkdir -p "${USER_CONFIG_DIR}"
+  if [[ ! -f "${USER_CONFIG_FILE}" ]]; then
+    cat >"${USER_CONFIG_FILE}" <<EOF
+known_paths: []
+server:
+  backend_host: ${BACKEND_HOST}
+  backend_port: ${BACKEND_PORT}
+  frontend_host: ${FRONTEND_HOST}
+  frontend_port: ${FRONTEND_PORT}
+EOF
+  fi
+
+  if [[ ! -x "${ROOT_DIR}/backend/.venv/bin/python" ]]; then
+    return
+  fi
+
+  local raw
+  raw="$(${ROOT_DIR}/backend/.venv/bin/python - <<'PY'
+from pathlib import Path
+import yaml
+
+config_path = Path.home() / ".mediareviewer" / "config.yaml"
+data = {}
+if config_path.exists():
+    loaded = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    if isinstance(loaded, dict):
+        data = loaded
+
+server = data.get("server", {})
+if not isinstance(server, dict):
+    server = {}
+
+backend_host = str(server.get("backend_host", "127.0.0.1"))
+backend_port = int(server.get("backend_port", 5000))
+frontend_host = str(server.get("frontend_host", "0.0.0.0"))
+frontend_port = int(server.get("frontend_port", 5173))
+
+print(backend_host)
+print(backend_port)
+print(frontend_host)
+print(frontend_port)
+PY
+  )"
+
+  BACKEND_HOST="$(printf '%s\n' "${raw}" | sed -n '1p')"
+  BACKEND_PORT="$(printf '%s\n' "${raw}" | sed -n '2p')"
+  FRONTEND_HOST="$(printf '%s\n' "${raw}" | sed -n '3p')"
+  FRONTEND_PORT="$(printf '%s\n' "${raw}" | sed -n '4p')"
+}
+
+print_access_urls() {
+  echo "access urls:"
+  echo "  frontend: http://${FRONTEND_HOST}:${FRONTEND_PORT}"
+  echo "  backend api: http://${BACKEND_HOST}:${BACKEND_PORT}/api"
+}
 
 ensure_dev_dir() {
   mkdir -p "${DEV_DIR}"
@@ -40,7 +104,10 @@ start_backend() {
   fi
 
   echo "starting backend..."
-  nohup "${ROOT_DIR}/backend/.venv/bin/mediareviewer-api" >"${BACKEND_LOG}" 2>&1 &
+  nohup env \
+    MEDIAREVIEWER_HOST="${BACKEND_HOST}" \
+    MEDIAREVIEWER_PORT="${BACKEND_PORT}" \
+    "${ROOT_DIR}/backend/.venv/bin/mediareviewer-api" >"${BACKEND_LOG}" 2>&1 &
   echo $! >"${BACKEND_PID_FILE}"
   echo "backend started (pid $(cat "${BACKEND_PID_FILE}"))"
 }
@@ -57,7 +124,7 @@ start_frontend() {
   fi
 
   echo "starting frontend..."
-  nohup bash -lc "cd '${ROOT_DIR}/frontend' && npm run dev -- --host 0.0.0.0" >"${FRONTEND_LOG}" 2>&1 &
+  nohup bash -lc "cd '${ROOT_DIR}/frontend' && npm run dev -- --host ${FRONTEND_HOST} --port ${FRONTEND_PORT}" >"${FRONTEND_LOG}" 2>&1 &
   echo $! >"${FRONTEND_PID_FILE}"
   echo "frontend started (pid $(cat "${FRONTEND_PID_FILE}"))"
 }
@@ -94,6 +161,7 @@ status() {
   echo "logs:"
   echo "  ${BACKEND_LOG}"
   echo "  ${FRONTEND_LOG}"
+  print_access_urls
 }
 
 run_lint() {
@@ -116,6 +184,7 @@ run_test() {
 }
 
 start_all() {
+  load_runtime_config
   ensure_dev_dir
   start_backend
   start_frontend
@@ -123,6 +192,7 @@ start_all() {
 }
 
 stop_all() {
+  load_runtime_config
   ensure_dev_dir
   stop_process "frontend" "${FRONTEND_PID_FILE}"
   stop_process "backend" "${BACKEND_PID_FILE}"
@@ -165,6 +235,7 @@ main() {
       restart_all
       ;;
     status)
+      load_runtime_config
       ensure_dev_dir
       status
       ;;

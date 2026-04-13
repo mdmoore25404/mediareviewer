@@ -11,6 +11,7 @@ frontend/coverage/
 frontend/*.tsbuildinfo
 frontend/vite.config.d.ts
 frontend/vite.config.js
+.dev/
 __pycache__/
 *.pyc
 *.pyo

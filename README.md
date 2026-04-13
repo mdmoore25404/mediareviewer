@@ -40,6 +40,42 @@ Use `./dev.sh` from the repository root to manage local workflows:
 - `./dev.sh lint`: run backend and frontend lint suites.
 - `./dev.sh test`: run backend tests, frontend tests, and frontend build checks.
 
+`dev.sh` reads listen and port settings from `~/.mediareviewer/config.yaml`:
+
+```yaml
+known_paths:
+	- /home/michaelmoore/trailcam
+server:
+	backend_host: 127.0.0.1
+	backend_port: 5000
+	frontend_host: 0.0.0.0
+	frontend_port: 5173
+```
+
+Access URLs are printed by `./dev.sh status` and after `./dev.sh start`.
+
+## Architecture Portability
+
+Media Reviewer is designed for x86_64 and ARM64 environments, including Apple Silicon.
+
+- Python and Node-based application code is architecture-portable by default.
+- Any future native extensions, system codecs, or low-level binaries must be validated on both x86_64 and ARM64.
+- If introducing architecture-specific dependencies, document compatibility and fallback behavior in this README and in `.TODO/open-questions.md`.
+
+## Docker Multi-Arch Guidance
+
+When adding or updating container builds:
+
+- Use official multi-arch base images (for example, official Python images).
+- Build and publish a multi-platform image manifest for at least `linux/amd64` and `linux/arm64`.
+- Validate runtime behavior on both architectures before release.
+
+Example build command:
+
+```bash
+docker buildx build --platform linux/amd64,linux/arm64 -t <image>:<tag> --push .
+```
+
 ## Quality gates
 
 Every implementation request in this repository must:

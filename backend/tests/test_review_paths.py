@@ -37,6 +37,42 @@ def test_add_review_path_persists_config(tmp_path: Path) -> None:
     config_content = (state_directory / "config.yaml").read_text(encoding="utf-8")
     assert "known_paths:" in config_content
     assert str(review_directory.resolve()) in config_content
+    assert "server:" in config_content
+    assert "backend_port: 5000" in config_content
+
+
+def test_add_review_path_preserves_existing_server_config(tmp_path: Path) -> None:
+    """Adding a path should not remove existing server listen/port settings."""
+
+    state_directory = tmp_path / "state"
+    state_directory.mkdir(parents=True)
+    review_directory = tmp_path / "review"
+    review_directory.mkdir(parents=True)
+    (state_directory / "config.yaml").write_text(
+        "known_paths: []\n"
+        "server:\n"
+        "  backend_host: 0.0.0.0\n"
+        "  backend_port: 5050\n"
+        "  frontend_host: 0.0.0.0\n"
+        "  frontend_port: 4173\n",
+        encoding="utf-8",
+    )
+
+    settings = AppSettings(
+        state_directory=state_directory,
+        hidden_picker_paths=(),
+        deletion_workers=1,
+    )
+    app = create_app(settings)
+    client: FlaskClient = app.test_client()
+
+    response = client.post("/api/review-paths", json={"path": str(review_directory.resolve())})
+
+    assert response.status_code == 201
+    config_content = (state_directory / "config.yaml").read_text(encoding="utf-8")
+    assert "backend_host: 0.0.0.0" in config_content
+    assert "backend_port: 5050" in config_content
+    assert "frontend_port: 4173" in config_content
 
 
 def test_get_review_paths_returns_persisted_values(tmp_path: Path) -> None:

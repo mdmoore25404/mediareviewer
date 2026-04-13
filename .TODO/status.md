@@ -15,5 +15,8 @@
   - implemented frontend prototype for path management, scanning, filtering, sorting, and actions.
   - added root `dev.sh` helper for start/stop/restart/status/lint/test workflows.
   - validated full backend and frontend suites through `./dev.sh lint` and `./dev.sh test`.
+  - documented x86_64 and ARM64 (Apple Silicon) runtime portability expectations.
+  - documented Docker multi-arch manifest requirements for linux/amd64 and linux/arm64.
+  - moved frontend/backend listen and port configuration into `~/.mediareviewer/config.yaml` and wired `dev.sh` to report access URLs.
 - next target:
   - implement dedicated review-mode playback with next/back keyboard and touch navigation.
