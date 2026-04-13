@@ -14,6 +14,15 @@ BACKEND_HOST="127.0.0.1"
 BACKEND_PORT="5000"
 FRONTEND_HOST="0.0.0.0"
 FRONTEND_PORT="5173"
+API_PROXY_HOST="127.0.0.1"
+
+refresh_proxy_host() {
+  if [[ "${BACKEND_HOST}" == "0.0.0.0" ]]; then
+    API_PROXY_HOST="127.0.0.1"
+  else
+    API_PROXY_HOST="${BACKEND_HOST}"
+  fi
+}
 
 load_runtime_config() {
   mkdir -p "${USER_CONFIG_DIR}"
@@ -64,6 +73,7 @@ PY
   BACKEND_PORT="$(printf '%s\n' "${raw}" | sed -n '2p')"
   FRONTEND_HOST="$(printf '%s\n' "${raw}" | sed -n '3p')"
   FRONTEND_PORT="$(printf '%s\n' "${raw}" | sed -n '4p')"
+  refresh_proxy_host
 }
 
 print_access_urls() {
@@ -109,6 +119,14 @@ start_backend() {
     MEDIAREVIEWER_PORT="${BACKEND_PORT}" \
     "${ROOT_DIR}/backend/.venv/bin/mediareviewer-api" >"${BACKEND_LOG}" 2>&1 &
   echo $! >"${BACKEND_PID_FILE}"
+
+  sleep 1
+  if ! is_running "${BACKEND_PID_FILE}"; then
+    echo "backend failed to start; recent log output:"
+    tail -n 25 "${BACKEND_LOG}" || true
+    exit 1
+  fi
+
   echo "backend started (pid $(cat "${BACKEND_PID_FILE}"))"
 }
 
@@ -124,8 +142,18 @@ start_frontend() {
   fi
 
   echo "starting frontend..."
-  nohup bash -lc "cd '${ROOT_DIR}/frontend' && npm run dev -- --host ${FRONTEND_HOST} --port ${FRONTEND_PORT}" >"${FRONTEND_LOG}" 2>&1 &
+  nohup env \
+    VITE_API_PROXY_TARGET="http://${API_PROXY_HOST}:${BACKEND_PORT}" \
+    bash -lc "cd '${ROOT_DIR}/frontend' && npm run dev -- --host ${FRONTEND_HOST} --port ${FRONTEND_PORT} --strictPort" >"${FRONTEND_LOG}" 2>&1 &
   echo $! >"${FRONTEND_PID_FILE}"
+
+  sleep 1
+  if ! is_running "${FRONTEND_PID_FILE}"; then
+    echo "frontend failed to start; recent log output:"
+    tail -n 25 "${FRONTEND_LOG}" || true
+    exit 1
+  fi
+
   echo "frontend started (pid $(cat "${FRONTEND_PID_FILE}"))"
 }
 
@@ -146,6 +174,7 @@ stop_process() {
 }
 
 status() {
+  refresh_proxy_host
   if is_running "${BACKEND_PID_FILE}"; then
     echo "backend: running (pid $(cat "${BACKEND_PID_FILE}"))"
   else
@@ -162,6 +191,7 @@ status() {
   echo "  ${BACKEND_LOG}"
   echo "  ${FRONTEND_LOG}"
   print_access_urls
+  echo "  frontend proxy target: http://${API_PROXY_HOST}:${BACKEND_PORT}"
 }
 
 run_lint() {
