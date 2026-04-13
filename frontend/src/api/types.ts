@@ -59,7 +59,7 @@ export interface MediaItemsResponse {
   items: MediaItem[];
 }
 
-export type MediaAction = "lock" | "trash" | "seen" | "unseen";
+export type MediaAction = "lock" | "unlock" | "trash" | "untrash" | "seen" | "unseen";
 
 export interface MediaActionResponse {
   path: string;

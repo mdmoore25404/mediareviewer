@@ -234,7 +234,9 @@ Applies a companion-file state action to a media file under a known review path.
 ### Actions
 
 - `lock`: creates `.lock` and removes `.trash`.
-- `trash`: creates `.trash` and removes `.lock`.
+- `unlock`: removes `.lock`.
+- `trash`: creates `.trash`, creates `.seen` (trash implies seen), and removes `.lock`.
+- `untrash`: removes `.trash`.
 - `seen`: creates `.seen`.
 - `unseen`: removes `.seen`.
 
@@ -247,7 +249,7 @@ Applies a companion-file state action to a media file under a known review path.
   "status": {
     "locked": false,
     "trashed": true,
-    "seen": false
+    "seen": true
   }
 }
 ```

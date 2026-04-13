@@ -173,15 +173,29 @@ function App(): ReactElement {
         return;
       }
       if (event.key.toLowerCase() === "d" || event.key.toLowerCase() === "t") {
-        void handleMediaAction(activeReviewItem.path, "trash");
+        if (activeReviewItem.status.trashed) {
+          void handleMediaAction(activeReviewItem.path, "untrash");
+        } else {
+          void (async () => {
+            await handleMediaAction(activeReviewItem.path, "trash");
+            showNextReviewItem();
+          })();
+        }
         return;
       }
       if (event.key.toLowerCase() === "s") {
-        void handleMediaAction(activeReviewItem.path, "seen");
+        if (activeReviewItem.status.seen) {
+          void handleMediaAction(activeReviewItem.path, "unseen");
+        } else {
+          void (async () => {
+            await handleMediaAction(activeReviewItem.path, "seen");
+            showNextReviewItem();
+          })();
+        }
         return;
       }
       if (event.key.toLowerCase() === "f" || event.key.toLowerCase() === "l") {
-        void handleMediaAction(activeReviewItem.path, "lock");
+        void handleMediaAction(activeReviewItem.path, activeReviewItem.status.locked ? "unlock" : "lock");
         return;
       }
     };
@@ -190,6 +204,7 @@ function App(): ReactElement {
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- showNextReviewItem captures displayedItems/activeReviewIndex which are already deps
   }, [activeReviewIndex, activeReviewItem, displayedItems]);
 
   const handleScan = async (): Promise<void> => {
@@ -830,39 +845,44 @@ function App(): ReactElement {
                 <div className="d-flex flex-wrap gap-2">
                   <button
                     type="button"
-                    className="btn btn-outline-primary"
+                    className={activeReviewItem.status.locked ? "btn btn-warning" : "btn btn-outline-warning"}
                     onClick={() => {
-                      void handleMediaAction(activeReviewItem.path, "lock");
+                      void handleMediaAction(activeReviewItem.path, activeReviewItem.status.locked ? "unlock" : "lock");
                     }}
                   >
-                    Lock
+                    {activeReviewItem.status.locked ? "Locked" : "Lock"}
                   </button>
                   <button
                     type="button"
-                    className="btn btn-outline-danger"
+                    className={activeReviewItem.status.trashed ? "btn btn-danger" : "btn btn-outline-danger"}
                     onClick={() => {
-                      void handleMediaAction(activeReviewItem.path, "trash");
+                      if (activeReviewItem.status.trashed) {
+                        void handleMediaAction(activeReviewItem.path, "untrash");
+                      } else {
+                        void (async () => {
+                          await handleMediaAction(activeReviewItem.path, "trash");
+                          showNextReviewItem();
+                        })();
+                      }
                     }}
                   >
-                    Trash
+                    {activeReviewItem.status.trashed ? "Trashed" : "Trash"}
                   </button>
                   <button
                     type="button"
-                    className="btn btn-outline-success"
+                    className={activeReviewItem.status.seen ? "btn btn-success" : "btn btn-outline-success"}
                     onClick={() => {
-                      void handleMediaAction(activeReviewItem.path, "seen");
+                      if (activeReviewItem.status.seen) {
+                        void handleMediaAction(activeReviewItem.path, "unseen");
+                      } else {
+                        void (async () => {
+                          await handleMediaAction(activeReviewItem.path, "seen");
+                          showNextReviewItem();
+                        })();
+                      }
                     }}
                   >
-                    Seen
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-outline-light"
-                    onClick={() => {
-                      void handleMediaAction(activeReviewItem.path, "unseen");
-                    }}
-                  >
-                    Unseen
+                    {activeReviewItem.status.seen ? "Seen" : "Unseen"}
                   </button>
                 </div>
               </div>

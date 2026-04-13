@@ -371,8 +371,8 @@ def post_media_action() -> Response:
     action = request_body.get("action")
     if not isinstance(raw_path, str) or not raw_path.strip():
         return jsonify({"error": "Field 'path' must be a non-empty string."}), 400
-    if action not in {"lock", "trash", "seen", "unseen"}:
-        return jsonify({"error": "Field 'action' must be one of lock, trash, seen, unseen."}), 400
+    if action not in {"lock", "unlock", "trash", "untrash", "seen", "unseen"}:
+        return jsonify({"error": "Field 'action' must be one of lock, unlock, trash, untrash, seen, unseen."}), 400  # noqa: E501
 
     media_path = Path(raw_path).expanduser().resolve()
     if not media_path.exists() or not media_path.is_file():
