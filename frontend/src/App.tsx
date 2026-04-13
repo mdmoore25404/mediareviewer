@@ -198,7 +198,14 @@ function App(): ReactElement {
         return;
       }
       if (event.key.toLowerCase() === "f" || event.key.toLowerCase() === "l") {
-        void handleMediaAction(activeReviewItem.path, activeReviewItem.status.locked ? "unlock" : "lock");
+        if (activeReviewItem.status.locked) {
+          void handleMediaAction(activeReviewItem.path, "unlock");
+        } else {
+          void (async () => {
+            await handleMediaAction(activeReviewItem.path, "lock");
+            showNextReviewItem();
+          })();
+        }
         return;
       }
     };
@@ -833,6 +840,16 @@ function App(): ReactElement {
                 >
                   Close
                 </button>
+                {activeReviewItem.mediaType === "video" && (
+                  <button
+                    type="button"
+                    className={showVideoControls ? "btn btn-secondary" : "btn btn-outline-secondary"}
+                    onClick={() => setShowVideoControls((prev) => !prev)}
+                    title="Toggle seek controls"
+                  >
+                    <i className="fa-solid fa-sliders" aria-hidden="true" />
+                  </button>
+                )}
               </div>
 
               <div className="review-media-shell">
@@ -867,19 +884,12 @@ function App(): ReactElement {
                       controls={showVideoControls}
                       onClick={(event) => {
                         if (showVideoControls) {
-                          // Controls visible: let the browser handle the click (scrubbing etc.)
-                          // but toggle them off with a double-tap gesture — handled via the
-                          // controls bar itself; single click falls through to native player.
                           return;
                         }
                         const vid = event.currentTarget;
                         if (vid.paused) void vid.play();
                         else vid.pause();
                       }}
-                      onDoubleClick={() => {
-                        setShowVideoControls((prev) => !prev);
-                      }}
-                      title={showVideoControls ? "Double-tap to hide controls" : "Double-tap to show seek controls"}
                     >
                       <track kind="captions" />
                     </video>
@@ -900,7 +910,14 @@ function App(): ReactElement {
                     type="button"
                     className={activeReviewItem.status.locked ? "btn btn-warning" : "btn btn-outline-warning"}
                     onClick={() => {
-                      void handleMediaAction(activeReviewItem.path, activeReviewItem.status.locked ? "unlock" : "lock");
+                      if (activeReviewItem.status.locked) {
+                        void handleMediaAction(activeReviewItem.path, "unlock");
+                      } else {
+                        void (async () => {
+                          await handleMediaAction(activeReviewItem.path, "lock");
+                          showNextReviewItem();
+                        })();
+                      }
                     }}
                   >
                     {activeReviewItem.status.locked ? "Locked" : "Lock"}
