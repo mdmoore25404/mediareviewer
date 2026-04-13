@@ -824,9 +824,13 @@ function App(): ReactElement {
                     <video
                       className="review-media"
                       src={buildMediaFileUrl(activeReviewItem.path)}
-                      controls
                       autoPlay
                       playsInline
+                      onClick={(event) => {
+                        const vid = event.currentTarget;
+                        if (vid.paused) void vid.play();
+                        else vid.pause();
+                      }}
                     >
                       <track kind="captions" />
                     </video>
@@ -837,8 +841,8 @@ function App(): ReactElement {
               <div className="review-footer">
                 <div>
                   <h2 className="h5 mb-1">{activeReviewItem.name}</h2>
-                  <p className="mb-1 text-break">{activeReviewItem.path}</p>
-                  <p className="mb-0 text-secondary">
+                  <p className="review-path mb-1" title={activeReviewItem.path}>{activeReviewItem.path}</p>
+                  <p className="review-footer-date mb-0 text-secondary">
                     {formatSize(activeReviewItem.sizeBytes)} | modified {new Date(activeReviewItem.modifiedAt).toLocaleString()}
                   </p>
                 </div>

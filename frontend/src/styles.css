@@ -268,6 +268,16 @@ body {
   max-height: 70vh;
   object-fit: contain;
   display: block;
+  cursor: pointer; /* tap-to-play indicator for video */
+}
+
+.review-path {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  max-width: 46ch;
+  font-size: 0.85rem;
+  opacity: 0.75;
 }
 
 @media (max-width: 767px) {
@@ -295,5 +305,40 @@ body {
 
   .review-media {
     max-height: 55vh;
+  }
+
+  .review-path {
+    display: none;
+  }
+}
+
+/* Phone landscape: compact the chrome to maximise media area */
+@media (orientation: landscape) and (max-height: 600px) {
+  .review-overlay {
+    padding: 0.25rem 0.5rem;
+  }
+
+  .review-dialog {
+    gap: 0.25rem;
+  }
+
+  .review-path,
+  .review-footer-date {
+    display: none;
+  }
+
+  .review-footer .h5 {
+    font-size: 0.875rem;
+    margin-bottom: 0;
+  }
+
+  .review-toolbar .btn,
+  .review-footer .btn {
+    padding-block: 0.2rem;
+    font-size: 0.8rem;
+  }
+
+  .review-media {
+    max-height: calc(100vh - 7rem);
   }
 }
