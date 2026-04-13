@@ -85,6 +85,14 @@ class ScanResult:
     ignored_count: int
 
 
+@dataclass(frozen=True, slots=True)
+class FolderInfo:
+    """Information about a folder."""
+
+    path: str
+    name: str
+    has_children: bool
+
 class MediaScanner:
     """Scan a folder recursively and return supported media files only."""
 
@@ -112,6 +120,54 @@ class MediaScanner:
                 break
 
         return ScanResult(items=tuple(items), ignored_count=ignored_count)
+
+    def scan_folder(
+        self, folder_path: Path, offset: int = 0, limit: int = 100
+    ) -> ScanResult:
+        """Scan a single folder (not recursive) with pagination support."""
+
+        items: list[MediaItem] = []
+        ignored_count = 0
+        normalized_folder = folder_path.expanduser().resolve()
+
+        if not normalized_folder.is_dir():
+             return ScanResult(items=(), ignored_count=0)
+
+        all_files = [
+            f
+            for f in sorted(normalized_folder.iterdir())
+            if f.is_file() and not self._is_companion_file(f)
+        ]
+
+        for candidate in all_files[offset : offset + limit]:
+            media_type = self._detect_media_type(candidate)
+            if media_type is None:
+                ignored_count += 1
+                continue
+
+            items.append(self._build_media_item(candidate, media_type))
+
+        return ScanResult(items=tuple(items), ignored_count=ignored_count)
+
+    def get_folders(self, parent_path: Path) -> tuple[FolderInfo, ...]:
+        """Get sorted list of immediate child folders."""
+
+        normalized_parent = parent_path.expanduser().resolve()
+        if not normalized_parent.is_dir():
+             return ()
+
+        folders: list[FolderInfo] = []
+        for item in sorted(normalized_parent.iterdir()):
+            if item.is_dir() and not item.name.startswith("."):
+                has_children = any(
+                    child.is_dir() and not child.name.startswith(".")
+                    for child in item.iterdir()
+                )
+                folders.append(
+                    FolderInfo(path=str(item), name=item.name, has_children=has_children)
+                )
+
+        return tuple(folders)
 
     def _detect_media_type(self, file_path: Path) -> str | None:
         suffix = file_path.suffix.lower()

@@ -40,6 +40,102 @@ def get_health() -> Response:
     return jsonify(payload)
 
 
+@api_blueprint.get("/folders")
+def get_folders() -> Response:
+    """Get immediate child folders under a parent path."""
+
+    settings = cast(AppSettings, current_app.config["MEDIAREVIEWER_SETTINGS"])
+    media_scanner = cast(
+        MediaScanner,
+        current_app.extensions["mediareviewer.media_scanner"],
+    )
+
+    raw_path = request.args.get("path", type=str)
+    if not raw_path:
+        return jsonify({"error": "Query parameter 'path' is required."}), 400
+
+    parent_path = Path(raw_path).expanduser().resolve()
+    if not parent_path.exists() or not parent_path.is_dir():
+        return jsonify({"error": "Path must be an existing directory."}), 400
+
+    if _is_hidden_path(parent_path, settings.hidden_picker_paths):
+        return jsonify({"error": "Path is hidden by picker policy."}), 403
+
+    folders = media_scanner.get_folders(parent_path)
+    folders_payload: list[dict[str, object]] = []
+    for folder_info in folders:
+        folders_payload.append(asdict(folder_info))
+
+    payload = {
+        "path": str(parent_path),
+        "folders": folders_payload,
+    }
+    return jsonify(payload)
+
+
+@api_blueprint.get("/folders/<path:folder_path>/files")
+@api_blueprint.get("/folders/files")
+def get_folder_files() -> Response:
+    """Get paginated media files in a folder (non-recursive)."""
+
+    config_store = cast(
+        ReviewConfigStore,
+        current_app.extensions["mediareviewer.review_config_store"],
+    )
+    media_scanner = cast(
+        MediaScanner,
+        current_app.extensions["mediareviewer.media_scanner"],
+    )
+    thumbnail_cache = cast(
+        ThumbnailCacheService,
+        current_app.extensions["mediareviewer.thumbnail_cache"],
+    )
+
+    offset = request.args.get("offset", default=0, type=int)
+    limit = request.args.get("limit", default=100, type=int)
+
+    if offset < 0:
+        return jsonify({"error": "Query parameter 'offset' must be >= 0."}), 400
+    if limit <= 0 or limit > 1000:
+        return jsonify({"error": "Query parameter 'limit' must be between 1 and 1000."}), 400
+
+    raw_path = request.args.get("path", type=str)
+    if not raw_path:
+        return jsonify({"error": "Query parameter 'path' is required."}), 400
+
+    target_folder = Path(raw_path).expanduser().resolve()
+    config = config_store.load()
+    if not _is_under_known_path(target_folder, config.known_paths):
+        return jsonify({"error": "Folder is not under a configured review path."}), 403
+
+    scan_result = media_scanner.scan_folder(folder_path=target_folder, offset=offset, limit=limit)
+    items_payload: list[dict[str, object]] = []
+    for item in scan_result.items:
+        review_path = next(
+            (
+                path
+                for path in config.known_paths
+                if Path(item.path) == path or str(item.path).startswith(str(path / ""))
+            ),
+            None,
+        )
+        if review_path:
+            thumbnail_cache.ensure_thumbnail(Path(item.path), review_path, size=256)
+        item_payload = item.to_payload()
+        item_payload["thumbnailUrl"] = _build_media_thumbnail_url(item.path, 256)
+        items_payload.append(item_payload)
+
+    payload = {
+        "path": str(target_folder),
+        "offset": offset,
+        "limit": limit,
+        "count": len(scan_result.items),
+        "ignoredCount": scan_result.ignored_count,
+        "items": items_payload,
+    }
+    return jsonify(payload)
+
+
 @api_blueprint.get("/review-paths")
 def get_review_paths() -> Response:
     """Return configured review paths and hidden picker paths."""

@@ -74,6 +74,100 @@ Adds and persists a known review path.
 - `400`: request body missing or `path` invalid.
 - `403`: path is under hidden picker policy.
 
+## GET /api/folders
+
+Returns immediate child folders under a parent directory. Hidden folders (starting with `.`) are excluded.
+
+### Query Parameters
+
+- `path` (required): absolute path must be an existing directory.
+
+### Response
+
+```json
+{
+  "path": "/home/michaelmoore/reviews",
+  "folders": [
+    {
+      "path": "/home/michaelmoore/reviews/trip-2025",
+      "name": "trip-2025",
+      "has_children": true
+    },
+    {
+      "path": "/home/michaelmoore/reviews/archive-2024",
+      "name": "archive-2024",
+      "has_children": false
+    }
+  ]
+}
+```
+
+### Notes
+
+- Folders starting with `.` are hidden and excluded from results.
+- `has_children` indicates whether the folder contains any non-hidden subfolders.
+- Folders are sorted alphabetically by name.
+
+### Errors
+
+- `400`: missing `path` parameter or path does not exist or is not a directory.
+- `403`: path is hidden by picker policy (e.g., under `/proc`, `/sys`).
+
+## GET /api/folders/files
+
+Returns paginated media files (images and videos only) in a single folder, non-recursive. Includes thumbnails.
+
+### Query Parameters
+
+- `path` (required): absolute folder path which must be under a configured known review path.
+- `offset` (optional): integer >= 0, default `0`. Number of files to skip.
+- `limit` (optional): integer from `1` to `1000`, default `100`. Maximum files to return.
+
+### Response
+
+```json
+{
+  "path": "/home/michaelmoore/reviews/trip-2025",
+  "offset": 0,
+  "limit": 100,
+  "count": 15,
+  "ignoredCount": 3,
+  "items": [
+    {
+      "path": "/home/michaelmoore/reviews/trip-2025/day1/photo001.jpg",
+      "name": "photo001.jpg",
+      "mediaType": "image",
+      "thumbnailUrl": "/api/media-thumbnail?path=%2Fhome%2Fmichaelmoore%2Freviews%2Ftrip-2025%2Fday1%2Fphoto001.jpg&size=256",
+      "sizeBytes": 2048576,
+      "modifiedAt": "2025-03-15T14:30:22.000000+00:00",
+      "createdAt": "2025-03-15T14:30:22.000000+00:00",
+      "status": {
+        "locked": false,
+        "trashed": false,
+        "seen": false
+      },
+      "metadata": {
+        "width": 4096,
+        "height": 3072
+      }
+    }
+  ]
+}
+```
+
+### Notes
+
+- Only image and video files are returned; other file types and companion files (`.lock`, `.trash`, `.seen`) are ignored.
+- `ignoredCount` indicates non-media files encountered during scan.
+- Results are sorted alphabetically by filename.
+- Each item includes `thumbnailUrl` pointing to the cached thumbnail.
+- Pagination is supported via `offset` and `limit` parameters for large folders.
+
+### Errors
+
+- `400`: missing `path`, invalid `offset` (negative), or invalid `limit` (zero, negative, or > 1000).
+- `403`: folder path is not under a configured known review path.
+
 ## GET /api/media-items
 
 Scans a known review path recursively and returns image/video files only. Companion state files and non-media files are ignored.
