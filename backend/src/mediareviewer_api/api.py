@@ -256,6 +256,10 @@ def stream_media_items() -> Response:
     if limit <= 0 or limit > 10000:
         return jsonify({"error": "Query parameter 'limit' must be between 1 and 10000."}), 400
 
+    offset = request.args.get("offset", default=0, type=int)
+    if offset < 0:
+        return jsonify({"error": "Query parameter 'offset' must be >= 0."}), 400
+
     requested_path = Path(raw_path).expanduser().resolve()
     config = config_store.load()
     if requested_path not in config.known_paths:
@@ -264,7 +268,7 @@ def stream_media_items() -> Response:
     @stream_with_context
     def generate() -> Response:
         count = 0
-        for item in media_scanner.scan_stream(root_path=requested_path, limit=limit):
+        for item in media_scanner.scan_stream(root_path=requested_path, limit=limit, offset=offset):
             item_payload = item.to_payload()
             item_payload["thumbnailUrl"] = _build_media_thumbnail_url(item.path, 256)
             yield json.dumps(item_payload) + "\n"

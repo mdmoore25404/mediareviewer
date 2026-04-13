@@ -81,8 +81,9 @@ export async function* streamMediaItems(
   path: string,
   limit: number,
   signal: AbortSignal,
+  offset = 0,
 ): AsyncGenerator<MediaItem | MediaStreamDone> {
-  const search = new URLSearchParams({ path, limit: String(limit) });
+  const search = new URLSearchParams({ path, limit: String(limit), offset: String(offset) });
   const response = await fetch(`/api/media-items/stream?${search.toString()}`, {
     headers: { Accept: "application/x-ndjson" },
     signal,

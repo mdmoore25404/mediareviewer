@@ -201,6 +201,12 @@ body {
   text-decoration: underline !important;
 }
 
+/* Infinite scroll sentinel — zero height, just for observation */
+.scroll-sentinel {
+  height: 1px;
+  width: 100%;
+}
+
 .review-overlay {
   position: fixed;
   inset: 0;

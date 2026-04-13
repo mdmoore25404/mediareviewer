@@ -70,7 +70,10 @@ function App(): ReactElement {
   const [sortOption, setSortOption] = useState<SortOption>("modified-desc");
   const [isBootLoading, setIsBootLoading] = useState<boolean>(true);
   const [isScanLoading, setIsScanLoading] = useState<boolean>(false);
+  const [isFetchingMore, setIsFetchingMore] = useState<boolean>(false);
+  const [hasMore, setHasMore] = useState<boolean>(false);
   const scanAbortRef = useRef<AbortController | null>(null);
+  const sentinelRef = useRef<HTMLDivElement>(null);
   const [isSubmittingPath, setIsSubmittingPath] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
@@ -202,6 +205,7 @@ function App(): ReactElement {
     setIsScanLoading(true);
     setMediaItems([]);
     setIgnoredCount(0);
+    setHasMore(false);
     setStatusMessage(null);
     setErrorMessage(null);
 
@@ -209,6 +213,7 @@ function App(): ReactElement {
     try {
       for await (const event of streamMediaItems(selectedPath, scanLimit, controller.signal)) {
         if ("type" in event && event.type === "done") {
+          setHasMore(event.count >= scanLimit);
           setStatusMessage(`Loaded ${event.count} media items from ${selectedPath}.`);
         } else {
           count += 1;
@@ -224,6 +229,54 @@ function App(): ReactElement {
       setIsScanLoading(false);
     }
   };
+
+  const handleLoadMore = async (): Promise<void> => {
+    if (!selectedPath || isFetchingMore || isScanLoading || !hasMore) return;
+
+    const controller = new AbortController();
+    scanAbortRef.current = controller;
+    setIsFetchingMore(true);
+
+    try {
+      const offset = mediaItems.length;
+      let count = 0;
+      for await (const event of streamMediaItems(selectedPath, scanLimit, controller.signal, offset)) {
+        if ("type" in event && event.type === "done") {
+          setHasMore(event.count >= scanLimit);
+        } else {
+          count += 1;
+          setMediaItems((prev) => [...prev, event as MediaItem]);
+        }
+      }
+      if (count === 0) setHasMore(false);
+    } catch (error: unknown) {
+      if ((error as Error).name === "AbortError") return;
+      const message = error instanceof Error ? error.message : "Unable to load more items.";
+      setErrorMessage(message);
+    } finally {
+      setIsFetchingMore(false);
+    }
+  };
+
+  // IntersectionObserver: load more items when the sentinel enters the viewport
+  useEffect(() => {
+    const sentinel = sentinelRef.current;
+    if (!sentinel) return undefined;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          void handleLoadMore();
+        }
+      },
+      { threshold: 0.1 },
+    );
+    observer.observe(sentinel);
+    return () => {
+      observer.disconnect();
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasMore, isFetchingMore, isScanLoading, selectedPath, mediaItems.length]);
 
   const handleAddPath = async (): Promise<void> => {
     if (!newPathInput.trim()) {
@@ -666,6 +719,18 @@ function App(): ReactElement {
                     </div>
                   )}
                 </div>
+
+                {/* Infinite scroll sentinel — observed by IntersectionObserver */}
+                <div ref={sentinelRef} className="scroll-sentinel" aria-hidden="true" />
+                {isFetchingMore && (
+                  <p className="text-center text-secondary small py-2">
+                    <i className="fa-solid fa-circle-notch fa-spin me-2" aria-hidden="true" />
+                    Loading more…
+                  </p>
+                )}
+                {!hasMore && mediaItems.length > 0 && !isScanLoading && (
+                  <p className="text-center text-secondary small py-2">All items loaded.</p>
+                )}
               </div>
             </section>
           </div>

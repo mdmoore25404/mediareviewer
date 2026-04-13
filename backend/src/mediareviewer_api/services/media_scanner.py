@@ -125,14 +125,17 @@ class MediaScanner:
 
         return ScanResult(items=tuple(items), ignored_count=ignored_count)
 
-    def scan_stream(self, root_path: Path, limit: int) -> Iterator[MediaItem]:
+    def scan_stream(self, root_path: Path, limit: int, offset: int = 0) -> Iterator[MediaItem]:
         """Yield media items one at a time as they are discovered, up to *limit*.
 
-        Hidden directories (names starting with ``'.'``) and companion files are
-        skipped silently so the caller receives only actionable media items.
+        *offset* media items that would otherwise be yielded are skipped first,
+        enabling simple page-based pagination over consecutive calls.  Hidden
+        directories (names starting with ``'.'``) and companion files are
+        skipped silently and do **not** count against *offset* or *limit*.
         """
 
         normalized_root = root_path.expanduser().resolve()
+        skipped = 0
         count = 0
         for candidate in sorted(normalized_root.rglob("*")):
             if not candidate.is_file():
@@ -143,6 +146,9 @@ class MediaScanner:
                 continue
             media_type = self._detect_media_type(candidate)
             if media_type is None:
+                continue
+            if skipped < offset:
+                skipped += 1
                 continue
             yield self._build_media_item(candidate, media_type)
             count += 1

@@ -349,3 +349,56 @@ def test_stream_media_items_excludes_hidden_directories(tmp_path: Path) -> None:
     assert names == ["real.jpg"]
     assert "abc123.png" not in names
 
+
+def test_stream_media_items_offset_pagination(tmp_path: Path) -> None:
+    """Offset pagination should skip the first N media items deterministically."""
+
+    import json
+
+    state_directory = tmp_path / "state"
+    review_directory = tmp_path / "trailcam"
+    review_directory.mkdir(parents=True)
+
+    # Create three images with sortable names so order is predictable
+    Image.new("RGB", (8, 8)).save(review_directory / "img_01.jpg")
+    Image.new("RGB", (8, 8)).save(review_directory / "img_02.jpg")
+    Image.new("RGB", (8, 8)).save(review_directory / "img_03.jpg")
+
+    state_directory.mkdir(parents=True)
+    (state_directory / "config.yaml").write_text(
+        "known_paths:\n  - " + str(review_directory.resolve()) + "\n",
+        encoding="utf-8",
+    )
+
+    settings = AppSettings(
+        state_directory=state_directory,
+        hidden_picker_paths=(),
+        deletion_workers=1,
+    )
+    app = create_app(settings)
+    client: FlaskClient = app.test_client()
+
+    # First page: offset=0, limit=2 → img_01, img_02
+    first_response = client.get(
+        "/api/media-items/stream",
+        query_string={"path": str(review_directory.resolve()), "limit": "2", "offset": "0"},
+    )
+    first_lines = [ln for ln in first_response.data.decode().splitlines() if ln.strip()]
+    first_names = [json.loads(ln)["name"] for ln in first_lines[:-1]]
+    first_done = json.loads(first_lines[-1])
+
+    assert first_names == ["img_01.jpg", "img_02.jpg"]
+    assert first_done == {"type": "done", "count": 2}
+
+    # Second page: offset=2, limit=2 → img_03 only (count < limit → no more pages)
+    second_response = client.get(
+        "/api/media-items/stream",
+        query_string={"path": str(review_directory.resolve()), "limit": "2", "offset": "2"},
+    )
+    second_lines = [ln for ln in second_response.data.decode().splitlines() if ln.strip()]
+    second_names = [json.loads(ln)["name"] for ln in second_lines[:-1]]
+    second_done = json.loads(second_lines[-1])
+
+    assert second_names == ["img_03.jpg"]
+    assert second_done == {"type": "done", "count": 1}
+
