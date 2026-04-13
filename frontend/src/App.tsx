@@ -72,6 +72,8 @@ function App(): ReactElement {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [activeReviewPath, setActiveReviewPath] = useState<string | null>(null);
+  const [touchStartX, setTouchStartX] = useState<number | null>(null);
+  const [touchStartY, setTouchStartY] = useState<number | null>(null);
 
   useEffect(() => {
     const abortController = new AbortController();
@@ -262,6 +264,35 @@ function App(): ReactElement {
       return;
     }
     setActiveReviewPath(displayedItems[(activeReviewIndex + 1) % displayedItems.length]?.path ?? null);
+  };
+
+  const handleReviewTouchStart = (touchX: number, touchY: number): void => {
+    setTouchStartX(touchX);
+    setTouchStartY(touchY);
+  };
+
+  const handleReviewTouchEnd = (touchX: number, touchY: number): void => {
+    if (touchStartX === null || touchStartY === null) {
+      return;
+    }
+
+    const deltaX = touchX - touchStartX;
+    const deltaY = touchY - touchStartY;
+    const horizontalThreshold = 60;
+
+    setTouchStartX(null);
+    setTouchStartY(null);
+
+    if (Math.abs(deltaX) < horizontalThreshold || Math.abs(deltaX) < Math.abs(deltaY)) {
+      return;
+    }
+
+    if (deltaX < 0) {
+      showNextReviewItem();
+      return;
+    }
+
+    showPreviousReviewItem();
   };
 
   const renderMediaPreview = (item: MediaItem, className: string): ReactElement => {
@@ -637,23 +668,40 @@ function App(): ReactElement {
               </div>
 
               <div className="review-media-shell">
-                {activeReviewItem.mediaType === "image" ? (
-                  <img
-                    className="review-media"
-                    src={buildMediaFileUrl(activeReviewItem.path)}
-                    alt={activeReviewItem.name}
-                  />
-                ) : (
-                  <video
-                    className="review-media"
-                    src={buildMediaFileUrl(activeReviewItem.path)}
-                    controls
-                    autoPlay
-                    playsInline
-                  >
-                    <track kind="captions" />
-                  </video>
-                )}
+                <div
+                  className="review-media-gesture-layer"
+                  data-testid="review-media-shell"
+                  onTouchStart={(event) => {
+                    const firstTouch = event.changedTouches[0];
+                    if (firstTouch) {
+                      handleReviewTouchStart(firstTouch.clientX, firstTouch.clientY);
+                    }
+                  }}
+                  onTouchEnd={(event) => {
+                    const firstTouch = event.changedTouches[0];
+                    if (firstTouch) {
+                      handleReviewTouchEnd(firstTouch.clientX, firstTouch.clientY);
+                    }
+                  }}
+                >
+                  {activeReviewItem.mediaType === "image" ? (
+                    <img
+                      className="review-media"
+                      src={buildMediaFileUrl(activeReviewItem.path)}
+                      alt={activeReviewItem.name}
+                    />
+                  ) : (
+                    <video
+                      className="review-media"
+                      src={buildMediaFileUrl(activeReviewItem.path)}
+                      controls
+                      autoPlay
+                      playsInline
+                    >
+                      <track kind="captions" />
+                    </video>
+                  )}
+                </div>
               </div>
 
               <div className="review-footer">

@@ -7,7 +7,7 @@ The current prototype includes:
 - known review path management
 - recursive media scanning with non-media filtering
 - grid and list views with image/video previews
-- fullscreen review mode opened from a media card
+- fullscreen review mode opened from a media card with keyboard and swipe/touch navigation
 - lock, trash, seen, and unseen companion-file actions
 
 ## Workspace layout

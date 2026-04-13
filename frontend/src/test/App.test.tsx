@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -29,7 +29,7 @@ const reviewPathsResponse: ReviewPathsResponse = {
 
 const mediaItemsResponse: MediaItemsResponse = {
   path: "/home/michaelmoore/trailcam",
-  count: 1,
+  count: 2,
   ignoredCount: 2,
   items: [
     {
@@ -47,6 +47,23 @@ const mediaItemsResponse: MediaItemsResponse = {
       metadata: {
         width: 12,
         height: 8,
+      },
+    },
+    {
+      path: "/home/michaelmoore/trailcam/DCIM/100MEDIA/frame002.jpg",
+      name: "frame002.jpg",
+      mediaType: "image",
+      sizeBytes: 2048,
+      modifiedAt: "2026-04-12T21:55:19+00:00",
+      createdAt: "2026-04-12T21:55:19+00:00",
+      status: {
+        locked: false,
+        trashed: false,
+        seen: false,
+      },
+      metadata: {
+        width: 10,
+        height: 10,
       },
     },
   ],
@@ -148,7 +165,15 @@ describe("App", () => {
       expect(screen.getByText("frame001.jpg")).toBeInTheDocument();
     });
 
-    await user.click(screen.getByRole("button", { name: "Seen" }));
+    const cards = screen.getAllByTestId("media-item");
+    const frame001Card = cards.find((card) => within(card).queryByText("frame001.jpg") !== null);
+    expect(frame001Card).toBeTruthy();
+
+    if (!frame001Card) {
+      throw new Error("Expected frame001.jpg card to be present.");
+    }
+
+    await user.click(within(frame001Card).getByRole("button", { name: "Seen" }));
 
     await waitFor(() => {
       expect(screen.getAllByText("seen").length).toBeGreaterThan(0);
@@ -169,11 +194,64 @@ describe("App", () => {
       expect(screen.getByText("frame001.jpg")).toBeInTheDocument();
     });
 
-    await user.click(screen.getByTestId("media-item"));
+    const cards = screen.getAllByTestId("media-item");
+    const frame001Card = cards.find((card) => within(card).queryByText("frame001.jpg") !== null);
+    expect(frame001Card).toBeTruthy();
+
+    if (!frame001Card) {
+      throw new Error("Expected frame001.jpg card to be present.");
+    }
+
+    await user.click(frame001Card);
 
     await waitFor(() => {
       expect(screen.getByTestId("review-dialog")).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Close" })).toBeInTheDocument();
+    });
+  });
+
+  it("swipes to the next item in fullscreen review mode", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Scan media" })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole("button", { name: "Scan media" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("frame001.jpg")).toBeInTheDocument();
+      expect(screen.getByText("frame002.jpg")).toBeInTheDocument();
+    });
+
+    const cards = screen.getAllByTestId("media-item");
+    const frame001Card = cards.find((card) => within(card).queryByText("frame001.jpg") !== null);
+    expect(frame001Card).toBeTruthy();
+
+    if (!frame001Card) {
+      throw new Error("Expected frame001.jpg card to be present.");
+    }
+
+    await user.click(frame001Card);
+
+    const reviewDialog = await screen.findByTestId("review-dialog");
+
+    await waitFor(() => {
+      expect(reviewDialog).toBeInTheDocument();
+      expect(within(reviewDialog).getByRole("heading", { name: "frame001.jpg" })).toBeInTheDocument();
+    });
+
+    const reviewMediaShell = screen.getByTestId("review-media-shell");
+    fireEvent.touchStart(reviewMediaShell, {
+      changedTouches: [{ clientX: 200, clientY: 100 }],
+    });
+    fireEvent.touchEnd(reviewMediaShell, {
+      changedTouches: [{ clientX: 80, clientY: 100 }],
+    });
+
+    await waitFor(() => {
+      expect(within(reviewDialog).getByRole("heading", { name: "frame002.jpg" })).toBeInTheDocument();
     });
   });
 });

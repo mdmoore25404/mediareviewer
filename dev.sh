@@ -112,6 +112,34 @@ ensure_dev_dir() {
   mkdir -p "${DEV_DIR}"
 }
 
+port_listener_pids() {
+  local port="$1"
+  ss -ltnp "( sport = :${port} )" 2>/dev/null | sed -n 's/.*pid=\([0-9]\+\).*/\1/p' | sort -u
+}
+
+kill_port_listeners() {
+  local port="$1"
+  local pid
+  while IFS= read -r pid; do
+    if [[ -n "${pid}" ]]; then
+      kill "${pid}" >/dev/null 2>&1 || true
+    fi
+  done < <(port_listener_pids "${port}")
+}
+
+wait_for_port_release() {
+  local port="$1"
+  local retries=20
+  while [[ ${retries} -gt 0 ]]; do
+    if [[ -z "$(port_listener_pids "${port}")" ]]; then
+      return 0
+    fi
+    retries=$((retries - 1))
+    sleep 0.2
+  done
+  return 1
+}
+
 is_running() {
   local pid_file="$1"
   if [[ ! -f "${pid_file}" ]]; then
@@ -140,6 +168,7 @@ start_backend() {
   fi
 
   echo "starting backend..."
+  kill_port_listeners "${BACKEND_PORT}"
   nohup env \
     MEDIAREVIEWER_HOST="${BACKEND_HOST}" \
     MEDIAREVIEWER_PORT="${BACKEND_PORT}" \
@@ -168,10 +197,11 @@ start_frontend() {
   fi
 
   echo "starting frontend..."
+  kill_port_listeners "${FRONTEND_PORT}"
   nohup env \
     VITE_ALLOWED_HOSTS="$(joined_trusted_hosts)" \
     VITE_API_PROXY_TARGET="http://${API_PROXY_HOST}:${BACKEND_PORT}" \
-    bash -lc "cd '${ROOT_DIR}/frontend' && npm run dev -- --host ${FRONTEND_HOST} --port ${FRONTEND_PORT} --strictPort" >"${FRONTEND_LOG}" 2>&1 &
+    bash -lc "cd '${ROOT_DIR}/frontend' && exec npm run dev -- --host ${FRONTEND_HOST} --port ${FRONTEND_PORT} --strictPort" >"${FRONTEND_LOG}" 2>&1 &
   echo $! >"${FRONTEND_PID_FILE}"
 
   sleep 1
@@ -187,6 +217,7 @@ start_frontend() {
 stop_process() {
   local name="$1"
   local pid_file="$2"
+  local port="$3"
 
   if ! is_running "${pid_file}"; then
     echo "${name} not running"
@@ -197,6 +228,8 @@ stop_process() {
   pid="$(cat "${pid_file}")"
   echo "stopping ${name} (pid ${pid})..."
   kill "${pid}" >/dev/null 2>&1 || true
+  kill_port_listeners "${port}"
+  wait_for_port_release "${port}" || true
   rm -f "${pid_file}"
 }
 
@@ -254,8 +287,8 @@ start_all() {
 stop_all() {
   load_runtime_config
   ensure_dev_dir
-  stop_process "frontend" "${FRONTEND_PID_FILE}"
-  stop_process "backend" "${BACKEND_PID_FILE}"
+  stop_process "frontend" "${FRONTEND_PID_FILE}" "${FRONTEND_PORT}"
+  stop_process "backend" "${BACKEND_PID_FILE}" "${BACKEND_PORT}"
   status
 }
 

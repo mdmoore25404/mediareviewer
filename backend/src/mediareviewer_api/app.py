@@ -35,7 +35,7 @@ def main() -> None:
 
     settings = AppSettings.from_env()
     app = create_app(settings)
-    app.run(host=settings.host, port=settings.port, debug=True)
+    app.run(host=settings.host, port=settings.port, debug=True, use_reloader=False)
 
 
 if __name__ == "__main__":

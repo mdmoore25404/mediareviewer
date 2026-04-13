@@ -22,5 +22,7 @@
   - added YAML-configurable trusted hosts for Flask and Vite dev access beyond localhost.
   - added image/video thumbnails to grid and list views using a protected media streaming endpoint.
   - implemented fullscreen review mode with prev/next navigation and keyboard controls.
+  - added swipe/touch navigation in fullscreen review mode.
+  - fixed `dev.sh restart` so frontend/backend ports are actually released and rebound cleanly.
 - next target:
   - add deletion queue endpoints and the related frontend job status UI.
