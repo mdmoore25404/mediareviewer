@@ -10,6 +10,7 @@ import {
   fetchReviewPaths,
 } from "./api/client";
 import type { HealthResponse, MediaAction, MediaItem } from "./api/types";
+import { FolderBrowser } from "./FolderBrowser";
 
 type ViewMode = "grid" | "list";
 type StatusFilter = "all" | "locked" | "trashed" | "seen" | "unseen";
@@ -75,6 +76,7 @@ function App(): ReactElement {
   const [activeReviewPath, setActiveReviewPath] = useState<string | null>(null);
   const [touchStartX, setTouchStartX] = useState<number | null>(null);
   const [touchStartY, setTouchStartY] = useState<number | null>(null);
+  const [isFolderBrowserOpen, setIsFolderBrowserOpen] = useState<boolean>(false);
 
   useEffect(() => {
     const abortController = new AbortController();
@@ -353,6 +355,17 @@ function App(): ReactElement {
                   />
                   <button
                     type="button"
+                    className="btn btn-outline-secondary"
+                    title="Browse folders"
+                    aria-label="Browse folders"
+                    onClick={() => {
+                      setIsFolderBrowserOpen((prev) => !prev);
+                    }}
+                  >
+                    <i className="fa-solid fa-folder-open" aria-hidden="true" />
+                  </button>
+                  <button
+                    type="button"
                     className="btn btn-outline-primary"
                     onClick={() => {
                       void handleAddPath();
@@ -362,6 +375,19 @@ function App(): ReactElement {
                     {isSubmittingPath ? "Adding..." : "Add"}
                   </button>
                 </div>
+
+                {isFolderBrowserOpen && (
+                  <FolderBrowser
+                    knownPaths={knownPaths}
+                    hiddenPaths={hiddenPaths}
+                    onSelectFolder={(path) => {
+                      setNewPathInput(path);
+                    }}
+                    onClose={() => {
+                      setIsFolderBrowserOpen(false);
+                    }}
+                  />
+                )}
                 <label className="form-label small text-uppercase text-secondary mt-3" htmlFor="known-path">
                   Known path
                 </label>

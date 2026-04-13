@@ -141,6 +141,66 @@ body {
   margin-bottom: 0.75rem;
 }
 
+/* Folder browser */
+.folder-browser {
+  border: 1px solid rgba(19, 34, 56, 0.12);
+  border-radius: 0.5rem;
+  background: rgba(255, 255, 255, 0.95);
+  margin-bottom: 1rem;
+  max-height: 320px;
+  display: flex;
+  flex-direction: column;
+}
+
+.folder-browser-header {
+  flex-shrink: 0;
+  font-size: 0.875rem;
+}
+
+.folder-browser-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.folder-browser-row {
+  cursor: default;
+  transition: background 0.1s;
+  font-size: 0.875rem;
+}
+
+.folder-browser-row:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.folder-browser-expand-btn {
+  width: 1.25rem;
+  flex-shrink: 0;
+  color: #6c757d;
+  font-size: 0.7rem;
+  text-decoration: none !important;
+}
+
+.folder-browser-expand-btn:disabled {
+  opacity: 0.4;
+}
+
+.folder-browser-name-btn {
+  color: #132238;
+  font-size: 0.875rem;
+  flex: 1;
+  min-width: 0;
+  text-decoration: none !important;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.folder-browser-name-btn:hover {
+  color: #2a59a8;
+  text-decoration: underline !important;
+}
+
 .review-overlay {
   position: fixed;
   inset: 0;
