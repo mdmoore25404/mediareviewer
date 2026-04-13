@@ -84,6 +84,7 @@ function App(): ReactElement {
   const [touchStartY, setTouchStartY] = useState<number | null>(null);
   const [isFolderBrowserOpen, setIsFolderBrowserOpen] = useState<boolean>(false);
   const [showVideoControls, setShowVideoControls] = useState<boolean>(false);
+  const [showHelp, setShowHelp] = useState<boolean>(false);
 
   useEffect(() => {
     const abortController = new AbortController();
@@ -163,6 +164,10 @@ function App(): ReactElement {
 
     const handleKeyDown = (event: globalThis.KeyboardEvent): void => {
       if (event.key === "Escape") {
+        if (showHelp) {
+          setShowHelp(false);
+          return;
+        }
         setActiveReviewPath(null);
         return;
       }
@@ -208,6 +213,10 @@ function App(): ReactElement {
         }
         return;
       }
+      if (event.key === "?") {
+        setShowHelp((prev) => !prev);
+        return;
+      }
     };
 
     window.addEventListener("keydown", handleKeyDown);
@@ -215,7 +224,7 @@ function App(): ReactElement {
       window.removeEventListener("keydown", handleKeyDown);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps -- showNextReviewItem captures displayedItems/activeReviewIndex which are already deps
-  }, [activeReviewIndex, activeReviewItem, displayedItems]);
+  }, [activeReviewIndex, activeReviewItem, displayedItems, showHelp]);
 
   const handleScan = async (): Promise<void> => {
     if (!selectedPath) {
@@ -850,7 +859,32 @@ function App(): ReactElement {
                     <i className="fa-solid fa-sliders" aria-hidden="true" />
                   </button>
                 )}
+                <button
+                  type="button"
+                  className={`btn review-help-btn ${showHelp ? "btn-secondary" : "btn-outline-secondary"}`}
+                  onClick={() => setShowHelp((prev) => !prev)}
+                  aria-label="Keyboard shortcuts"
+                  title="Keyboard shortcuts (?)"
+                >
+                  <i className="fa-solid fa-keyboard" aria-hidden="true" />
+                </button>
               </div>
+
+              {showHelp && (
+                <div className="review-help-panel" role="complementary" aria-label="Keyboard shortcuts">
+                  <h3 className="review-help-title">Keyboard shortcuts</h3>
+                  <table className="review-help-table">
+                    <tbody>
+                      <tr><td><kbd>→</kbd> / <kbd>←</kbd></td><td>Next / previous item</td></tr>
+                      <tr><td><kbd>S</kbd></td><td>Mark seen (auto-advances) — toggle unseen</td></tr>
+                      <tr><td><kbd>T</kbd> / <kbd>D</kbd></td><td>Trash (auto-advances) — toggle untrash</td></tr>
+                      <tr><td><kbd>L</kbd> / <kbd>F</kbd></td><td>Lock (auto-advances) — toggle unlock</td></tr>
+                      <tr><td><kbd>?</kbd></td><td>Show / hide this panel</td></tr>
+                      <tr><td><kbd>Esc</kbd></td><td>Close panel / close review</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              )}
 
               <div className="review-media-shell">
                 <div

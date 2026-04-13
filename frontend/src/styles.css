@@ -280,6 +280,48 @@ body {
   opacity: 0.75;
 }
 
+.review-help-panel {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 0.75rem;
+  padding: 1rem 1.25rem;
+  color: #f4f6f8;
+}
+
+.review-help-title {
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  opacity: 0.6;
+  margin-bottom: 0.6rem;
+}
+
+.review-help-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.review-help-table td {
+  padding: 0.2rem 0.75rem 0.2rem 0;
+  vertical-align: middle;
+}
+
+.review-help-table td:first-child {
+  white-space: nowrap;
+}
+
+.review-help-table kbd {
+  display: inline-block;
+  padding: 0.1em 0.4em;
+  border-radius: 0.3rem;
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  font-size: 0.8em;
+  line-height: 1.4;
+}
+
 @media (max-width: 767px) {
   .status-card {
     padding: 1.5rem;
@@ -308,6 +350,12 @@ body {
   }
 
   .review-path {
+    display: none;
+  }
+
+  /* Help button and panel not needed on touch-only mobile */
+  .review-help-btn,
+  .review-help-panel {
     display: none;
   }
 }
