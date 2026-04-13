@@ -63,7 +63,7 @@ function App(): ReactElement {
   const [newPathInput, setNewPathInput] = useState<string>("/home/michaelmoore/trailcam");
   const [mediaItems, setMediaItems] = useState<MediaItem[]>([]);
   const [ignoredCount, setIgnoredCount] = useState<number>(0);
-  const [scanLimit, setScanLimit] = useState<number>(200);
+  const [scanLimit, setScanLimit] = useState<number>(50);
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [mediaFilter, setMediaFilter] = useState<MediaFilter>("all");

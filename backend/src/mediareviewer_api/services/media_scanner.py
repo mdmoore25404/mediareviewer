@@ -106,6 +106,9 @@ class MediaScanner:
         for candidate in sorted(normalized_root.rglob("*")):
             if not candidate.is_file():
                 continue
+            if self._is_in_hidden_directory(candidate, normalized_root):
+                ignored_count += 1
+                continue
             if self._is_companion_file(candidate):
                 ignored_count += 1
                 continue
@@ -176,6 +179,14 @@ class MediaScanner:
         if suffix in VIDEO_EXTENSIONS:
             return "video"
         return None
+
+    def _is_in_hidden_directory(self, file_path: Path, root: Path) -> bool:
+        """Return True if any directory component between root and file_path starts with '.'."""
+        try:
+            rel = file_path.relative_to(root)
+        except ValueError:
+            return False
+        return any(part.startswith(".") for part in rel.parts[:-1])
 
     def _is_companion_file(self, file_path: Path) -> bool:
         lower_path = str(file_path).lower()
