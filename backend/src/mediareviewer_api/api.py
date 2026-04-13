@@ -191,56 +191,15 @@ def add_review_path() -> Response:
     return jsonify(payload), 201
 
 
-@api_blueprint.get("/media-items")
-def get_media_items() -> Response:
-    """Scan and return media items for a configured review path."""
-
-    config_store = cast(
-        ReviewConfigStore,
-        current_app.extensions["mediareviewer.review_config_store"],
-    )
-    media_scanner = cast(
-        MediaScanner,
-        current_app.extensions["mediareviewer.media_scanner"],
-    )
-
-    raw_path = request.args.get("path", type=str)
-    if not raw_path:
-        return jsonify({"error": "Query parameter 'path' is required."}), 400
-
-    limit = request.args.get("limit", default=1000, type=int)
-    if limit <= 0 or limit > 10000:
-        return jsonify({"error": "Query parameter 'limit' must be between 1 and 10000."}), 400
-
-    requested_path = Path(raw_path).expanduser().resolve()
-    config = config_store.load()
-    if requested_path not in config.known_paths:
-        return jsonify({"error": "Path is not configured as a known review path."}), 403
-
-    scan_result = media_scanner.scan(root_path=requested_path, limit=limit)
-    items_payload: list[dict[str, object]] = []
-    for item in scan_result.items:
-        item_payload = item.to_payload()
-        item_payload["thumbnailUrl"] = _build_media_thumbnail_url(item.path, 256)
-        items_payload.append(item_payload)
-
-    payload = {
-        "path": str(requested_path),
-        "count": len(scan_result.items),
-        "ignoredCount": scan_result.ignored_count,
-        "items": items_payload,
-    }
-    return jsonify(payload)
-
-
 @api_blueprint.get("/media-items/stream")
 def stream_media_items() -> Response:
     """Stream media items as NDJSON, yielding each item as soon as it is found.
 
-    Each line of the response body is a JSON object.  Item lines contain the
-    same fields as the objects in ``/api/media-items``.  The final line has the
-    shape ``{"type": "done", "count": N}`` to let the client confirm how many
-    items were actually streamed.
+    Each line of the response body is a JSON object.  Item lines have the same
+    shape as a single element from the ``items`` array that the old polling
+    endpoint returned.  The final line has the shape
+    ``{"type": "done", "count": N}`` to let the client confirm how many items
+    were actually streamed.
     """
 
     config_store = cast(

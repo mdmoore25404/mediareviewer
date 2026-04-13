@@ -7,7 +7,6 @@ import type {
   MediaAction,
   MediaActionResponse,
   MediaItem,
-  MediaItemsResponse,
   MediaStreamDone,
   ReviewPathsResponse,
 } from "./types";
@@ -55,20 +54,6 @@ export async function addReviewPath(path: string): Promise<AddReviewPathResponse
     body: JSON.stringify({ path }),
   });
   return parseJsonResponse<AddReviewPathResponse>(response);
-}
-
-/** Scan a known review path for image and video items. */
-export async function fetchMediaItems(path: string, limit: number): Promise<MediaItemsResponse> {
-  const search = new URLSearchParams({
-    path,
-    limit: String(limit),
-  });
-  const response = await fetch(`/api/media-items?${search.toString()}`, {
-    headers: {
-      Accept: "application/json",
-    },
-  });
-  return parseJsonResponse<MediaItemsResponse>(response);
 }
 
 /**

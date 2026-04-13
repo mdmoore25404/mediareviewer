@@ -52,13 +52,6 @@ export interface MediaItem {
   metadata: MediaMetadata;
 }
 
-export interface MediaItemsResponse {
-  path: string;
-  count: number;
-  ignoredCount: number;
-  items: MediaItem[];
-}
-
 export type MediaAction = "lock" | "unlock" | "trash" | "untrash" | "seen" | "unseen";
 
 export interface MediaActionResponse {

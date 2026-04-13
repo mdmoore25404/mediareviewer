@@ -10,6 +10,8 @@
 
 ## Still open
 
-- image metadata probing uses Pillow; decide whether to add dedicated video duration/dimension probing.
+- image metadata probing uses Pillow; decide whether to add dedicated video duration/dimension probing via ffprobe.
 - decide whether hidden-path configuration should be allowlist-first or blocklist-first in the long term.
-- define server-side pagination strategy for very large camera folders.
+- server-side pagination: answered — offset-based NDJSON streaming with infinite scroll is in place.
+- deletion queue is currently a counter-only placeholder; decide whether async worker-based deletion is needed or whether the synchronous empty-trash endpoint is sufficient for the target use case.
+- `GET /api/media-items/stream` is now documented; the legacy `/api/media-items` polling endpoint has been removed. Resolved — Option B (consolidate to stream only).

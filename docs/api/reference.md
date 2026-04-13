@@ -168,54 +168,41 @@ Returns paginated media files (images and videos only) in a single folder, non-r
 - `400`: missing `path`, invalid `offset` (negative), or invalid `limit` (zero, negative, or > 1000).
 - `403`: folder path is not under a configured known review path.
 
-## GET /api/media-items
+## GET /api/media-items/stream
 
-Scans a known review path recursively and returns image/video files only. Companion state files and non-media files are ignored.
+Scans a known review path recursively and streams image/video files as NDJSON (one JSON object per line). Companion state files, hidden directories, and non-media files are ignored. Supports offset-based pagination for infinite-scroll clients.
 
 ### Query Parameters
 
 - `path` (required): absolute path that must already exist in `knownPaths`.
-- `limit` (optional): integer from `1` to `10000`, default `1000`.
+- `limit` (optional): integer from `1` to `10000`, default `50`.
+- `offset` (optional): integer >= `0`, default `0`. Skips the first N matched items to support pagination.
 
 ### Response
 
+Response `Content-Type` is `application/x-ndjson`. Each line (except the last) is a media item:
+
 ```json
-{
-  "path": "/home/michaelmoore/trailcam",
-  "count": 2,
-  "ignoredCount": 4,
-  "items": [
-    {
-      "path": "/home/michaelmoore/trailcam/DCIM/100MEDIA/frame001.jpg",
-      "name": "frame001.jpg",
-      "mediaType": "image",
-      "thumbnailUrl": "/api/media-thumbnail?path=%2Fhome%2Fmichaelmoore%2Ftrailcam%2FDCIM%2F100MEDIA%2Fframe001.jpg&size=256",
-      "sizeBytes": 154323,
-      "modifiedAt": "2026-04-12T21:50:19.123456+00:00",
-      "createdAt": "2026-04-12T21:50:19.123456+00:00",
-      "status": {
-        "locked": false,
-        "trashed": false,
-        "seen": true
-      },
-      "metadata": {
-        "width": 1920,
-        "height": 1080
-      }
-    }
-  ]
-}
+{"path": "/home/michaelmoore/trailcam/DCIM/100MEDIA/frame001.jpg", "name": "frame001.jpg", "mediaType": "image", "thumbnailUrl": "/api/media-thumbnail?path=...&size=256", "sizeBytes": 154323, "modifiedAt": "2026-04-12T21:50:19.123456+00:00", "createdAt": "2026-04-12T21:50:19.123456+00:00", "status": {"locked": false, "trashed": false, "seen": true}, "metadata": {"width": 1920, "height": 1080}}
 ```
+
+The final line is always the done sentinel:
+
+```json
+{"type": "done", "count": 2}
+```
+
+`count` reflects the number of item lines yielded in this page. When `count < limit`, the client can infer there are no more pages.
 
 ### Notes
 
-- Each item includes `thumbnailUrl`, which points at the disk-backed thumbnail cache.
-- On Linux, generated thumbnails use the freedesktop thumbnail cache layout under `~/.cache/thumbnails` by default.
-- On macOS and Windows, thumbnails are cached under the Media Reviewer state directory unless `MEDIAREVIEWER_THUMBNAIL_CACHE_DIR` overrides the location.
+- Items are sorted alphabetically by filename.
+- `thumbnailUrl` points to the disk-backed per-folder thumbnail cache.
+- Hidden directories (names starting with `.`) are excluded from the recursive walk.
 
 ### Errors
 
-- `400`: missing required `path` query parameter or invalid `limit`.
+- `400`: missing `path`, negative `offset`, or invalid `limit` (zero, negative, or > 10000).
 - `403`: path is not in configured known review paths.
 
 ## POST /api/media-actions
@@ -233,9 +220,9 @@ Applies a companion-file state action to a media file under a known review path.
 
 ### Actions
 
-- `lock`: creates `.lock`, creates `.seen` (lock implies seen), and removes `.trash`.
+- `lock`: creates `.lock`, creates `.seen` (lock implies seen).
 - `unlock`: removes `.lock`.
-- `trash`: creates `.trash`, creates `.seen` (trash implies seen), and removes `.lock`.
+- `trash`: creates `.trash`, creates `.seen` (trash implies seen). **Rejected with 409 if the item is currently locked.**
 - `untrash`: removes `.trash`.
 - `seen`: creates `.seen`.
 - `unseen`: removes `.seen`.
@@ -258,6 +245,7 @@ Applies a companion-file state action to a media file under a known review path.
 
 - `400`: request body invalid, unsupported action, or media path missing.
 - `403`: media path is outside configured known review paths.
+- `409`: `trash` action attempted on a locked item. Unlock first, or use `unlock` followed by `trash`.
 
 ## POST /api/empty-trash
 
