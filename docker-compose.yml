@@ -34,7 +34,7 @@ services:
       # unless you need the app to physically delete trashed files.
       - type: bind
         source: ${HOME}/trailcam
-        target: /home/mediareviewer/trailcam
+        target: /home/ubuntu/trailcam
 
     environment:
       MEDIAREVIEWER_HOST: "0.0.0.0"

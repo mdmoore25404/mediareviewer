@@ -39,9 +39,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libtiff6 \
     && rm -rf /var/lib/apt/lists/*
 
-# Create a non-root user; media volumes are expected to be read-only mounts
-RUN useradd --uid 1000 --create-home --shell /bin/bash mediareviewer
-
+# ubuntu:24.04 ships with an 'ubuntu' user at UID 1000 — use it directly
 WORKDIR /app
 
 # Install Python dependencies into an isolated venv
@@ -60,10 +58,10 @@ RUN /app/.venv/bin/pip install --no-cache-dir ./src \
 COPY --from=frontend-builder /build/frontend/dist /app/static
 
 # Config and state directories will be mounted at runtime
-RUN mkdir -p /data && chown mediareviewer:mediareviewer /data
+RUN mkdir -p /data && chown ubuntu:ubuntu /data
 VOLUME ["/data"]
 
-USER mediareviewer
+USER ubuntu
 
 # Runtime environment
 ENV MEDIAREVIEWER_HOST=0.0.0.0 \
