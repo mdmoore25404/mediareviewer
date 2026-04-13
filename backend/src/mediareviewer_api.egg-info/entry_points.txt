@@ -1,2 +1,0 @@
-[console_scripts]
-mediareviewer-api = mediareviewer_api.app:main
