@@ -32,11 +32,9 @@ services:
       # ── Optional: media directories to review ────────────────────────────
       # Add one entry per root path you want to scan.  Use read-only mounts
       # unless you need the app to physically delete trashed files.
-      # Example (uncomment and adjust):
-      # - type: bind
-      #   source: /mnt/trailcam
-      #   target: /mnt/trailcam
-      #   read_only: false
+      - type: bind
+        source: ${HOME}/trailcam
+        target: /home/mediareviewer/trailcam
 
     environment:
       MEDIAREVIEWER_HOST: "0.0.0.0"
