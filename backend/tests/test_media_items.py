@@ -231,3 +231,121 @@ def test_media_items_excludes_thumbnails_directory(tmp_path: Path) -> None:
     assert names == ["frame001.jpg"]
     assert "d5c529d2e907d4406b594e03b963dfbe.png" not in names
 
+
+def test_stream_media_items_yields_items_progressively(tmp_path: Path) -> None:
+    """The stream endpoint must return NDJSON with one item per line and a done sentinel."""
+
+    import json
+
+    state_directory = tmp_path / "state"
+    review_directory = tmp_path / "trailcam"
+    nested_directory = review_directory / "DCIM"
+    nested_directory.mkdir(parents=True)
+
+    Image.new("RGB", (8, 8), color=(1, 2, 3)).save(nested_directory / "img_a.jpg")
+    Image.new("RGB", (8, 8), color=(4, 5, 6)).save(nested_directory / "img_b.jpg")
+    (nested_directory / "notes.txt").write_text("ignored", encoding="utf-8")
+
+    state_directory.mkdir(parents=True)
+    (state_directory / "config.yaml").write_text(
+        "known_paths:\n  - " + str(review_directory.resolve()) + "\n",
+        encoding="utf-8",
+    )
+
+    settings = AppSettings(
+        state_directory=state_directory,
+        hidden_picker_paths=(),
+        deletion_workers=1,
+    )
+    app = create_app(settings)
+    client: FlaskClient = app.test_client()
+
+    response = client.get(
+        "/api/media-items/stream",
+        query_string={"path": str(review_directory.resolve()), "limit": "10"},
+    )
+
+    assert response.status_code == 200
+    assert response.content_type == "application/x-ndjson"
+
+    lines = [ln for ln in response.data.decode().splitlines() if ln.strip()]
+    assert len(lines) == 3  # two items + done sentinel
+
+    item_lines = lines[:-1]
+    done_line = json.loads(lines[-1])
+
+    names = {json.loads(ln)["name"] for ln in item_lines}
+    assert names == {"img_a.jpg", "img_b.jpg"}
+
+    for raw in item_lines:
+        item = json.loads(raw)
+        assert item["mediaType"] == "image"
+        assert item["thumbnailUrl"].startswith("/api/media-thumbnail?")
+        assert "type" not in item
+
+    assert done_line == {"type": "done", "count": 2}
+
+
+def test_stream_media_items_rejects_unknown_path(tmp_path: Path) -> None:
+    """The stream endpoint must reject paths outside configured review roots."""
+
+    state_directory = tmp_path / "state"
+    state_directory.mkdir(parents=True)
+    settings = AppSettings(
+        state_directory=state_directory,
+        hidden_picker_paths=(),
+        deletion_workers=1,
+    )
+    app = create_app(settings)
+    client: FlaskClient = app.test_client()
+
+    response = client.get(
+        "/api/media-items/stream",
+        query_string={"path": str(tmp_path / "not-configured")},
+    )
+
+    assert response.status_code == 403
+    assert response.get_json() == {"error": "Path is not configured as a known review path."}
+
+
+def test_stream_media_items_excludes_hidden_directories(tmp_path: Path) -> None:
+    """The stream endpoint must not yield files inside hidden directories."""
+
+    import json
+
+    state_directory = tmp_path / "state"
+    review_directory = tmp_path / "trailcam"
+    review_directory.mkdir(parents=True)
+
+    Image.new("RGB", (8, 8)).save(review_directory / "real.jpg")
+
+    thumb_dir = review_directory / ".thumbnails" / "large"
+    thumb_dir.mkdir(parents=True)
+    Image.new("RGB", (256, 256)).save(thumb_dir / "abc123.png")
+
+    state_directory.mkdir(parents=True)
+    (state_directory / "config.yaml").write_text(
+        "known_paths:\n  - " + str(review_directory.resolve()) + "\n",
+        encoding="utf-8",
+    )
+
+    settings = AppSettings(
+        state_directory=state_directory,
+        hidden_picker_paths=(),
+        deletion_workers=1,
+    )
+    app = create_app(settings)
+    client: FlaskClient = app.test_client()
+
+    response = client.get(
+        "/api/media-items/stream",
+        query_string={"path": str(review_directory.resolve()), "limit": "20"},
+    )
+
+    assert response.status_code == 200
+    lines = [ln for ln in response.data.decode().splitlines() if ln.strip()]
+    item_lines = lines[:-1]
+    names = [json.loads(ln)["name"] for ln in item_lines]
+    assert names == ["real.jpg"]
+    assert "abc123.png" not in names
+

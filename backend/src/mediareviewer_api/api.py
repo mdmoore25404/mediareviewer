@@ -1,11 +1,12 @@
 """HTTP routes exposed by the Media Reviewer API."""
 
+import json
 from dataclasses import asdict
 from pathlib import Path
 from typing import cast
 from urllib.parse import urlencode
 
-from flask import Blueprint, Response, current_app, jsonify, request, send_file
+from flask import Blueprint, Response, current_app, jsonify, request, send_file, stream_with_context
 
 from mediareviewer_api.config import AppSettings
 from mediareviewer_api.services.companion_actions import CompanionActionService, CompanionStatus
@@ -198,10 +199,6 @@ def get_media_items() -> Response:
         MediaScanner,
         current_app.extensions["mediareviewer.media_scanner"],
     )
-    thumbnail_cache = cast(
-        ThumbnailCacheService,
-        current_app.extensions["mediareviewer.thumbnail_cache"],
-    )
 
     raw_path = request.args.get("path", type=str)
     if not raw_path:
@@ -219,7 +216,6 @@ def get_media_items() -> Response:
     scan_result = media_scanner.scan(root_path=requested_path, limit=limit)
     items_payload: list[dict[str, object]] = []
     for item in scan_result.items:
-        thumbnail_cache.ensure_thumbnail(Path(item.path), requested_path, size=256)
         item_payload = item.to_payload()
         item_payload["thumbnailUrl"] = _build_media_thumbnail_url(item.path, 256)
         items_payload.append(item_payload)
@@ -231,6 +227,51 @@ def get_media_items() -> Response:
         "items": items_payload,
     }
     return jsonify(payload)
+
+
+@api_blueprint.get("/media-items/stream")
+def stream_media_items() -> Response:
+    """Stream media items as NDJSON, yielding each item as soon as it is found.
+
+    Each line of the response body is a JSON object.  Item lines contain the
+    same fields as the objects in ``/api/media-items``.  The final line has the
+    shape ``{"type": "done", "count": N}`` to let the client confirm how many
+    items were actually streamed.
+    """
+
+    config_store = cast(
+        ReviewConfigStore,
+        current_app.extensions["mediareviewer.review_config_store"],
+    )
+    media_scanner = cast(
+        MediaScanner,
+        current_app.extensions["mediareviewer.media_scanner"],
+    )
+
+    raw_path = request.args.get("path", type=str)
+    if not raw_path:
+        return jsonify({"error": "Query parameter 'path' is required."}), 400
+
+    limit = request.args.get("limit", default=50, type=int)
+    if limit <= 0 or limit > 10000:
+        return jsonify({"error": "Query parameter 'limit' must be between 1 and 10000."}), 400
+
+    requested_path = Path(raw_path).expanduser().resolve()
+    config = config_store.load()
+    if requested_path not in config.known_paths:
+        return jsonify({"error": "Path is not configured as a known review path."}), 403
+
+    @stream_with_context
+    def generate() -> Response:
+        count = 0
+        for item in media_scanner.scan_stream(root_path=requested_path, limit=limit):
+            item_payload = item.to_payload()
+            item_payload["thumbnailUrl"] = _build_media_thumbnail_url(item.path, 256)
+            yield json.dumps(item_payload) + "\n"
+            count += 1
+        yield json.dumps({"type": "done", "count": count}) + "\n"
+
+    return Response(generate(), content_type="application/x-ndjson")
 
 
 @api_blueprint.get("/media-file")

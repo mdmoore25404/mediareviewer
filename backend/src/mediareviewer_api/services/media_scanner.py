@@ -1,5 +1,6 @@
 """Filesystem scanner for image and video review items."""
 
+from collections.abc import Iterator
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -123,6 +124,30 @@ class MediaScanner:
                 break
 
         return ScanResult(items=tuple(items), ignored_count=ignored_count)
+
+    def scan_stream(self, root_path: Path, limit: int) -> Iterator[MediaItem]:
+        """Yield media items one at a time as they are discovered, up to *limit*.
+
+        Hidden directories (names starting with ``'.'``) and companion files are
+        skipped silently so the caller receives only actionable media items.
+        """
+
+        normalized_root = root_path.expanduser().resolve()
+        count = 0
+        for candidate in sorted(normalized_root.rglob("*")):
+            if not candidate.is_file():
+                continue
+            if self._is_in_hidden_directory(candidate, normalized_root):
+                continue
+            if self._is_companion_file(candidate):
+                continue
+            media_type = self._detect_media_type(candidate)
+            if media_type is None:
+                continue
+            yield self._build_media_item(candidate, media_type)
+            count += 1
+            if count >= limit:
+                break
 
     def scan_folder(
         self, folder_path: Path, offset: int = 0, limit: int = 100

@@ -1,4 +1,4 @@
-import { type KeyboardEvent, type ReactElement, useEffect, useMemo, useState } from "react";
+import { type KeyboardEvent, type ReactElement, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   addReviewPath,
@@ -6,8 +6,8 @@ import {
   buildMediaFileUrl,
   buildMediaThumbnailUrl,
   fetchHealth,
-  fetchMediaItems,
   fetchReviewPaths,
+  streamMediaItems,
 } from "./api/client";
 import type { HealthResponse, MediaAction, MediaItem } from "./api/types";
 import { FolderBrowser } from "./FolderBrowser";
@@ -70,6 +70,7 @@ function App(): ReactElement {
   const [sortOption, setSortOption] = useState<SortOption>("modified-desc");
   const [isBootLoading, setIsBootLoading] = useState<boolean>(true);
   const [isScanLoading, setIsScanLoading] = useState<boolean>(false);
+  const scanAbortRef = useRef<AbortController | null>(null);
   const [isSubmittingPath, setIsSubmittingPath] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
@@ -193,17 +194,30 @@ function App(): ReactElement {
       setErrorMessage("Pick a review path before scanning.");
       return;
     }
+    // Cancel any scan already in flight
+    scanAbortRef.current?.abort();
+    const controller = new AbortController();
+    scanAbortRef.current = controller;
+
     setIsScanLoading(true);
+    setMediaItems([]);
+    setIgnoredCount(0);
     setStatusMessage(null);
     setErrorMessage(null);
+
+    let count = 0;
     try {
-      const payload = await fetchMediaItems(selectedPath, scanLimit);
-      setMediaItems(payload.items);
-      setIgnoredCount(payload.ignoredCount);
-      setStatusMessage(
-        `Loaded ${payload.count} media items from ${payload.path}. Ignored ${payload.ignoredCount} non-media or companion files.`,
-      );
+      for await (const event of streamMediaItems(selectedPath, scanLimit, controller.signal)) {
+        if ("type" in event && event.type === "done") {
+          setStatusMessage(`Loaded ${event.count} media items from ${selectedPath}.`);
+        } else {
+          count += 1;
+          setMediaItems((prev) => [...prev, event as MediaItem]);
+          setStatusMessage(`Scanning\u2026 ${count} found`);
+        }
+      }
     } catch (error: unknown) {
+      if ((error as Error).name === "AbortError") return;
       const message = error instanceof Error ? error.message : "Unable to scan review path.";
       setErrorMessage(message);
     } finally {

@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import App from "../App";
-import type { HealthResponse, MediaActionResponse, MediaItemsResponse, ReviewPathsResponse } from "../api/types";
+import type { HealthResponse, MediaActionResponse, MediaItem, ReviewPathsResponse } from "../api/types";
 
 const healthResponse: HealthResponse = {
   status: "ok",
@@ -27,49 +27,60 @@ const reviewPathsResponse: ReviewPathsResponse = {
   hiddenPickerPaths: ["/proc"],
 };
 
-const mediaItemsResponse: MediaItemsResponse = {
-  path: "/home/michaelmoore/trailcam",
-  count: 2,
-  ignoredCount: 2,
-  items: [
-    {
-      path: "/home/michaelmoore/trailcam/DCIM/100MEDIA/frame001.jpg",
-      name: "frame001.jpg",
-      mediaType: "image",
-      thumbnailUrl: "/api/media-thumbnail?path=%2Fhome%2Fmichaelmoore%2Ftrailcam%2FDCIM%2F100MEDIA%2Fframe001.jpg&size=256",
-      sizeBytes: 1024,
-      modifiedAt: "2026-04-12T21:50:19+00:00",
-      createdAt: "2026-04-12T21:50:19+00:00",
-      status: {
-        locked: false,
-        trashed: false,
-        seen: false,
-      },
-      metadata: {
-        width: 12,
-        height: 8,
-      },
+const mediaItems: MediaItem[] = [
+  {
+    path: "/home/michaelmoore/trailcam/DCIM/100MEDIA/frame001.jpg",
+    name: "frame001.jpg",
+    mediaType: "image",
+    thumbnailUrl: "/api/media-thumbnail?path=%2Fhome%2Fmichaelmoore%2Ftrailcam%2FDCIM%2F100MEDIA%2Fframe001.jpg&size=256",
+    sizeBytes: 1024,
+    modifiedAt: "2026-04-12T21:50:19+00:00",
+    createdAt: "2026-04-12T21:50:19+00:00",
+    status: {
+      locked: false,
+      trashed: false,
+      seen: false,
     },
-    {
-      path: "/home/michaelmoore/trailcam/DCIM/100MEDIA/frame002.jpg",
-      name: "frame002.jpg",
-      mediaType: "image",
-      thumbnailUrl: "/api/media-thumbnail?path=%2Fhome%2Fmichaelmoore%2Ftrailcam%2FDCIM%2F100MEDIA%2Fframe002.jpg&size=256",
-      sizeBytes: 2048,
-      modifiedAt: "2026-04-12T21:55:19+00:00",
-      createdAt: "2026-04-12T21:55:19+00:00",
-      status: {
-        locked: false,
-        trashed: false,
-        seen: false,
-      },
-      metadata: {
-        width: 10,
-        height: 10,
-      },
+    metadata: {
+      width: 12,
+      height: 8,
     },
-  ],
-};
+  },
+  {
+    path: "/home/michaelmoore/trailcam/DCIM/100MEDIA/frame002.jpg",
+    name: "frame002.jpg",
+    mediaType: "image",
+    thumbnailUrl: "/api/media-thumbnail?path=%2Fhome%2Fmichaelmoore%2Ftrailcam%2FDCIM%2F100MEDIA%2Fframe002.jpg&size=256",
+    sizeBytes: 2048,
+    modifiedAt: "2026-04-12T21:55:19+00:00",
+    createdAt: "2026-04-12T21:55:19+00:00",
+    status: {
+      locked: false,
+      trashed: false,
+      seen: false,
+    },
+    metadata: {
+      width: 10,
+      height: 10,
+    },
+  },
+];
+
+/** Build a ReadableStream that emits NDJSON for the given items plus a done sentinel. */
+function makeStreamBody(items: MediaItem[]): ReadableStream<Uint8Array> {
+  const encoder = new TextEncoder();
+  const ndjson =
+    items.map((item) => JSON.stringify(item)).join("\n") +
+    "\n" +
+    JSON.stringify({ type: "done", count: items.length }) +
+    "\n";
+  return new ReadableStream({
+    start(controller) {
+      controller.enqueue(encoder.encode(ndjson));
+      controller.close();
+    },
+  });
+}
 
 const mediaActionResponse: MediaActionResponse = {
   path: "/home/michaelmoore/trailcam/DCIM/100MEDIA/frame001.jpg",
@@ -105,10 +116,10 @@ describe("App", () => {
         });
       }
 
-      if (url.startsWith("/api/media-items?")) {
+      if (url.startsWith("/api/media-items/stream?")) {
         return Promise.resolve({
           ok: true,
-          json: () => Promise.resolve(mediaItemsResponse),
+          body: makeStreamBody(mediaItems),
         });
       }
 
@@ -149,7 +160,7 @@ describe("App", () => {
 
     await waitFor(() => {
       expect(screen.getByText("frame001.jpg")).toBeInTheDocument();
-      expect(screen.getByText(/Ignored while scanning: 2/i)).toBeInTheDocument();
+      expect(screen.getByText(/Loaded 2 media items/i)).toBeInTheDocument();
     });
   });
 

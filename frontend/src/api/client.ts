@@ -5,7 +5,9 @@ import type {
   HealthResponse,
   MediaAction,
   MediaActionResponse,
+  MediaItem,
   MediaItemsResponse,
+  MediaStreamDone,
   ReviewPathsResponse,
 } from "./types";
 
@@ -66,6 +68,51 @@ export async function fetchMediaItems(path: string, limit: number): Promise<Medi
     },
   });
   return parseJsonResponse<MediaItemsResponse>(response);
+}
+
+/**
+ * Stream media items from the NDJSON scan endpoint.
+ *
+ * Yields each {@link MediaItem} as soon as it is received.  The final value
+ * is a {@link MediaStreamDone} sentinel with the total item count confirmed by
+ * the server.  Throws on non-2xx responses or network errors.
+ */
+export async function* streamMediaItems(
+  path: string,
+  limit: number,
+  signal: AbortSignal,
+): AsyncGenerator<MediaItem | MediaStreamDone> {
+  const search = new URLSearchParams({ path, limit: String(limit) });
+  const response = await fetch(`/api/media-items/stream?${search.toString()}`, {
+    headers: { Accept: "application/x-ndjson" },
+    signal,
+  });
+  if (!response.ok || !response.body) {
+    const errorPayload = (await response.json().catch(() => null)) as { error?: string } | null;
+    const details = errorPayload?.error ?? `Scan failed with status ${response.status}.`;
+    throw new Error(details);
+  }
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() ?? "";
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (trimmed) {
+        yield JSON.parse(trimmed) as MediaItem | MediaStreamDone;
+      }
+    }
+  }
+  // Flush any remaining buffered content after the stream closes
+  const remaining = buffer.trim();
+  if (remaining) {
+    yield JSON.parse(remaining) as MediaItem | MediaStreamDone;
+  }
 }
 
 /** Apply lock/trash/seen/unseen state to a media item companion file set. */

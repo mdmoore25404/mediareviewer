@@ -86,3 +86,9 @@ export interface FolderFilesResponse {
   ignoredCount: number;
   items: MediaItem[];
 }
+
+/** Final line of a ``/api/media-items/stream`` NDJSON response. */
+export interface MediaStreamDone {
+  type: "done";
+  count: number;
+}
