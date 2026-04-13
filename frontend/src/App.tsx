@@ -1,88 +1,495 @@
-import { type ReactElement, useEffect, useState } from "react";
+import { type ReactElement, useEffect, useMemo, useState } from "react";
 
-import { fetchHealth } from "./api/client";
-import type { HealthResponse } from "./api/types";
+import {
+  addReviewPath,
+  applyMediaAction,
+  fetchHealth,
+  fetchMediaItems,
+  fetchReviewPaths,
+} from "./api/client";
+import type { HealthResponse, MediaAction, MediaItem } from "./api/types";
+
+type ViewMode = "grid" | "list";
+type StatusFilter = "all" | "locked" | "trashed" | "seen" | "unseen";
+type MediaFilter = "all" | "image" | "video";
+type SortOption = "modified-desc" | "modified-asc" | "size-desc" | "size-asc" | "name-asc";
+
+function sortMediaItems(items: MediaItem[], sortOption: SortOption): MediaItem[] {
+  const sorted = [...items];
+  sorted.sort((left, right) => {
+    if (sortOption === "name-asc") {
+      return left.name.localeCompare(right.name);
+    }
+    if (sortOption === "size-desc") {
+      return right.sizeBytes - left.sizeBytes;
+    }
+    if (sortOption === "size-asc") {
+      return left.sizeBytes - right.sizeBytes;
+    }
+
+    const leftDate = new Date(left.modifiedAt).getTime();
+    const rightDate = new Date(right.modifiedAt).getTime();
+    if (sortOption === "modified-asc") {
+      return leftDate - rightDate;
+    }
+    return rightDate - leftDate;
+  });
+  return sorted;
+}
+
+function formatSize(sizeBytes: number): string {
+  if (sizeBytes < 1024) {
+    return `${sizeBytes} B`;
+  }
+  const kib = sizeBytes / 1024;
+  if (kib < 1024) {
+    return `${kib.toFixed(1)} KiB`;
+  }
+  const mib = kib / 1024;
+  if (mib < 1024) {
+    return `${mib.toFixed(1)} MiB`;
+  }
+  return `${(mib / 1024).toFixed(1)} GiB`;
+}
 
 function App(): ReactElement {
   const [health, setHealth] = useState<HealthResponse | null>(null);
+  const [knownPaths, setKnownPaths] = useState<string[]>([]);
+  const [hiddenPaths, setHiddenPaths] = useState<string[]>([]);
+  const [selectedPath, setSelectedPath] = useState<string>("");
+  const [newPathInput, setNewPathInput] = useState<string>("/home/michaelmoore/trailcam");
+  const [mediaItems, setMediaItems] = useState<MediaItem[]>([]);
+  const [ignoredCount, setIgnoredCount] = useState<number>(0);
+  const [scanLimit, setScanLimit] = useState<number>(200);
+  const [viewMode, setViewMode] = useState<ViewMode>("grid");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [mediaFilter, setMediaFilter] = useState<MediaFilter>("all");
+  const [sortOption, setSortOption] = useState<SortOption>("modified-desc");
+  const [isBootLoading, setIsBootLoading] = useState<boolean>(true);
+  const [isScanLoading, setIsScanLoading] = useState<boolean>(false);
+  const [isSubmittingPath, setIsSubmittingPath] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
   useEffect(() => {
     const abortController = new AbortController();
 
-    const loadHealth = async (): Promise<void> => {
+    const loadBootstrap = async (): Promise<void> => {
       try {
-        const payload = await fetchHealth(abortController.signal);
-        setHealth(payload);
+        const [healthPayload, pathsPayload] = await Promise.all([
+          fetchHealth(abortController.signal),
+          fetchReviewPaths(abortController.signal),
+        ]);
+        setHealth(healthPayload);
+        setKnownPaths(pathsPayload.knownPaths);
+        setHiddenPaths(pathsPayload.hiddenPickerPaths);
+        if (pathsPayload.knownPaths.length > 0) {
+          setSelectedPath(pathsPayload.knownPaths[0]);
+        }
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : "Unable to load API status.";
         setErrorMessage(message);
       } finally {
-        setIsLoading(false);
+        setIsBootLoading(false);
       }
     };
 
-    void loadHealth();
+    void loadBootstrap();
     return () => {
       abortController.abort();
     };
   }, []);
 
+  const displayedItems = useMemo(() => {
+    const filteredByMedia = mediaItems.filter((item) => {
+      if (mediaFilter === "all") {
+        return true;
+      }
+      return item.mediaType === mediaFilter;
+    });
+
+    const filteredByStatus = filteredByMedia.filter((item) => {
+      if (statusFilter === "all") {
+        return true;
+      }
+      if (statusFilter === "locked") {
+        return item.status.locked;
+      }
+      if (statusFilter === "trashed") {
+        return item.status.trashed;
+      }
+      if (statusFilter === "seen") {
+        return item.status.seen;
+      }
+      return !item.status.seen;
+    });
+
+    return sortMediaItems(filteredByStatus, sortOption);
+  }, [mediaFilter, mediaItems, sortOption, statusFilter]);
+
+  const handleScan = async (): Promise<void> => {
+    if (!selectedPath) {
+      setErrorMessage("Pick a review path before scanning.");
+      return;
+    }
+    setIsScanLoading(true);
+    setStatusMessage(null);
+    setErrorMessage(null);
+    try {
+      const payload = await fetchMediaItems(selectedPath, scanLimit);
+      setMediaItems(payload.items);
+      setIgnoredCount(payload.ignoredCount);
+      setStatusMessage(
+        `Loaded ${payload.count} media items from ${payload.path}. Ignored ${payload.ignoredCount} non-media or companion files.`,
+      );
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Unable to scan review path.";
+      setErrorMessage(message);
+    } finally {
+      setIsScanLoading(false);
+    }
+  };
+
+  const handleAddPath = async (): Promise<void> => {
+    if (!newPathInput.trim()) {
+      setErrorMessage("Enter a path to add.");
+      return;
+    }
+
+    setIsSubmittingPath(true);
+    setStatusMessage(null);
+    setErrorMessage(null);
+    try {
+      const payload = await addReviewPath(newPathInput.trim());
+      setKnownPaths(payload.knownPaths);
+      if (!selectedPath && payload.knownPaths.length > 0) {
+        setSelectedPath(payload.knownPaths[0]);
+      }
+      setStatusMessage(`Added review path: ${payload.addedPath}`);
+      setNewPathInput("");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Unable to add review path.";
+      setErrorMessage(message);
+    } finally {
+      setIsSubmittingPath(false);
+    }
+  };
+
+  const handleMediaAction = async (itemPath: string, action: MediaAction): Promise<void> => {
+    setErrorMessage(null);
+    try {
+      const payload = await applyMediaAction(itemPath, action);
+      setMediaItems((previous) =>
+        previous.map((item) =>
+          item.path === payload.path
+            ? {
+                ...item,
+                status: payload.status,
+              }
+            : item,
+        ),
+      );
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Unable to apply media action.";
+      setErrorMessage(message);
+    }
+  };
+
   return (
     <main className="app-shell">
-      <section className="hero-panel container py-5">
-        <div className="row justify-content-center">
-          <div className="col-12 col-lg-10">
-            <div className="status-card shadow-lg">
-              <div className="d-flex flex-column flex-md-row justify-content-between gap-4">
-                <div>
-                  <p className="eyebrow">Media Reviewer</p>
-                  <h1 className="display-5 fw-semibold">Scaffold ready for the first review workflow slice.</h1>
-                  <p className="lead text-secondary mb-0">
-                    The frontend is connected to the Flask API and ready to evolve into folder
-                    selection, review, and deletion management.
-                  </p>
-                </div>
-                <div className="summary-pill align-self-start">
-                  <i className="fa-solid fa-mobile-screen-button me-2" aria-hidden="true" />
-                  Mobile-first shell
-                </div>
-              </div>
+      <section className="container py-4 py-lg-5">
+        <header className="status-card mb-4">
+          <div className="d-flex flex-column flex-lg-row justify-content-between gap-3 align-items-start">
+            <div>
+              <p className="eyebrow">Media Reviewer Prototype</p>
+              <h1 className="display-6 fw-semibold mb-2">Trailcam review dashboard</h1>
+              <p className="mb-0 text-secondary">
+                Manage review roots, scan recursively, and set lock or trash decisions from one
+                screen.
+              </p>
+            </div>
+            <div className="summary-pill">
+              <i className="fa-solid fa-leaf me-2" aria-hidden="true" />
+              low-resource mode
+            </div>
+          </div>
+        </header>
 
-              <div className="mt-4">
-                {isLoading && <p className="mb-0">Loading API status...</p>}
-                {!isLoading && errorMessage && (
-                  <div className="alert alert-danger mb-0" role="alert">
+        {isBootLoading && <p>Loading API and path configuration...</p>}
+
+        {!isBootLoading && (
+          <div className="row g-4">
+            <aside className="col-12 col-xl-4">
+              <section className="status-card h-100">
+                <h2 className="h5 mb-3">Review paths</h2>
+                <div className="input-group mb-2">
+                  <input
+                    value={newPathInput}
+                    onChange={(event) => {
+                      setNewPathInput(event.target.value);
+                    }}
+                    className="form-control"
+                    placeholder="/home/michaelmoore/trailcam"
+                    aria-label="Path to add"
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-outline-primary"
+                    onClick={() => {
+                      void handleAddPath();
+                    }}
+                    disabled={isSubmittingPath}
+                  >
+                    {isSubmittingPath ? "Adding..." : "Add"}
+                  </button>
+                </div>
+                <label className="form-label small text-uppercase text-secondary mt-3" htmlFor="known-path">
+                  Known path
+                </label>
+                <select
+                  id="known-path"
+                  className="form-select"
+                  value={selectedPath}
+                  onChange={(event) => {
+                    setSelectedPath(event.target.value);
+                  }}
+                >
+                  <option value="">Select a path</option>
+                  {knownPaths.map((path) => (
+                    <option key={path} value={path}>
+                      {path}
+                    </option>
+                  ))}
+                </select>
+
+                <div className="metric-card mt-3">
+                  <p className="metric-label">API status</p>
+                  <p className="metric-value mb-2">{health?.status ?? "unknown"}</p>
+                  <p className="small text-secondary mb-1">
+                    State directory: {health?.settings.stateDirectory ?? "-"}
+                  </p>
+                  <p className="small text-secondary mb-0">Hidden paths: {hiddenPaths.length}</p>
+                </div>
+
+                <details className="mt-3">
+                  <summary className="small fw-semibold text-secondary">Hidden picker paths</summary>
+                  <ul className="small mt-2 mb-0 ps-3">
+                    {hiddenPaths.map((path) => (
+                      <li key={path}>{path}</li>
+                    ))}
+                  </ul>
+                </details>
+              </section>
+            </aside>
+
+            <section className="col-12 col-xl-8">
+              <div className="status-card">
+                <div className="d-flex flex-column flex-lg-row gap-2 align-items-lg-end mb-3">
+                  <div>
+                    <label className="form-label small text-uppercase text-secondary" htmlFor="scan-limit">
+                      Scan limit
+                    </label>
+                    <input
+                      id="scan-limit"
+                      type="number"
+                      min={1}
+                      max={10000}
+                      className="form-control"
+                      value={scanLimit}
+                      onChange={(event) => {
+                        const nextLimit = Number(event.target.value);
+                        if (Number.isFinite(nextLimit)) {
+                          setScanLimit(nextLimit);
+                        }
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <label className="form-label small text-uppercase text-secondary" htmlFor="view-mode">
+                      View
+                    </label>
+                    <select
+                      id="view-mode"
+                      className="form-select"
+                      value={viewMode}
+                      onChange={(event) => {
+                        setViewMode(event.target.value as ViewMode);
+                      }}
+                    >
+                      <option value="grid">Grid</option>
+                      <option value="list">List</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="form-label small text-uppercase text-secondary" htmlFor="media-filter">
+                      Media
+                    </label>
+                    <select
+                      id="media-filter"
+                      className="form-select"
+                      value={mediaFilter}
+                      onChange={(event) => {
+                        setMediaFilter(event.target.value as MediaFilter);
+                      }}
+                    >
+                      <option value="all">All</option>
+                      <option value="image">Images</option>
+                      <option value="video">Videos</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="form-label small text-uppercase text-secondary" htmlFor="status-filter">
+                      Status
+                    </label>
+                    <select
+                      id="status-filter"
+                      className="form-select"
+                      value={statusFilter}
+                      onChange={(event) => {
+                        setStatusFilter(event.target.value as StatusFilter);
+                      }}
+                    >
+                      <option value="all">All</option>
+                      <option value="locked">Locked</option>
+                      <option value="trashed">Trashed</option>
+                      <option value="seen">Seen</option>
+                      <option value="unseen">Unseen</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="form-label small text-uppercase text-secondary" htmlFor="sort-option">
+                      Sort
+                    </label>
+                    <select
+                      id="sort-option"
+                      className="form-select"
+                      value={sortOption}
+                      onChange={(event) => {
+                        setSortOption(event.target.value as SortOption);
+                      }}
+                    >
+                      <option value="modified-desc">Newest modified</option>
+                      <option value="modified-asc">Oldest modified</option>
+                      <option value="size-desc">Largest first</option>
+                      <option value="size-asc">Smallest first</option>
+                      <option value="name-asc">Name A-Z</option>
+                    </select>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn btn-primary scan-button"
+                    onClick={() => {
+                      void handleScan();
+                    }}
+                    disabled={isScanLoading || !selectedPath}
+                  >
+                    <i className="fa-solid fa-magnifying-glass me-2" aria-hidden="true" />
+                    {isScanLoading ? "Scanning..." : "Scan media"}
+                  </button>
+                </div>
+
+                {statusMessage && (
+                  <div className="alert alert-success" role="status">
+                    {statusMessage}
+                  </div>
+                )}
+                {errorMessage && (
+                  <div className="alert alert-danger" role="alert">
                     {errorMessage}
                   </div>
                 )}
-                {!isLoading && health && (
-                  <div className="row g-3">
-                    <div className="col-12 col-md-4">
-                      <article className="metric-card h-100">
-                        <p className="metric-label">API status</p>
-                        <p className="metric-value">{health.status}</p>
-                      </article>
+
+                <div className="d-flex justify-content-between align-items-center mb-2">
+                  <p className="mb-0 fw-semibold">Displayed items: {displayedItems.length}</p>
+                  <p className="mb-0 text-secondary small">Ignored while scanning: {ignoredCount}</p>
+                </div>
+
+                <div className={viewMode === "grid" ? "media-grid" : "media-list"}>
+                  {displayedItems.map((item) => (
+                    <article
+                      key={item.path}
+                      className={viewMode === "grid" ? "media-card" : "media-row"}
+                      data-testid="media-item"
+                    >
+                      <div className="media-badge">
+                        <i
+                          className={
+                            item.mediaType === "image"
+                              ? "fa-regular fa-image"
+                              : "fa-solid fa-film"
+                          }
+                          aria-hidden="true"
+                        />
+                        <span>{item.mediaType}</span>
+                      </div>
+                      <h3 className="h6 mb-1 text-break">{item.name}</h3>
+                      <p className="small text-secondary mb-2 text-break">{item.path}</p>
+                      <p className="small mb-2">
+                        {formatSize(item.sizeBytes)} | modified {new Date(item.modifiedAt).toLocaleString()}
+                      </p>
+                      <div className="d-flex flex-wrap gap-2 mb-2">
+                        {item.status.locked && <span className="badge text-bg-primary">locked</span>}
+                        {item.status.trashed && <span className="badge text-bg-danger">trash</span>}
+                        {item.status.seen && <span className="badge text-bg-success">seen</span>}
+                        {!item.status.seen && <span className="badge text-bg-secondary">unseen</span>}
+                      </div>
+                      {item.metadata.width && item.metadata.height && (
+                        <p className="small text-secondary mb-2">
+                          {item.metadata.width} x {item.metadata.height}
+                        </p>
+                      )}
+                      <div className="d-flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          className="btn btn-sm btn-outline-primary"
+                          onClick={() => {
+                            void handleMediaAction(item.path, "lock");
+                          }}
+                        >
+                          Lock
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-sm btn-outline-danger"
+                          onClick={() => {
+                            void handleMediaAction(item.path, "trash");
+                          }}
+                        >
+                          Trash
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-sm btn-outline-success"
+                          onClick={() => {
+                            void handleMediaAction(item.path, "seen");
+                          }}
+                        >
+                          Seen
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-sm btn-outline-secondary"
+                          onClick={() => {
+                            void handleMediaAction(item.path, "unseen");
+                          }}
+                        >
+                          Unseen
+                        </button>
+                      </div>
+                    </article>
+                  ))}
+                  {displayedItems.length === 0 && (
+                    <div className="metric-card">
+                      <p className="mb-0">
+                        No media items to display. Add or select a path, then scan your trailcam root.
+                      </p>
                     </div>
-                    <div className="col-12 col-md-4">
-                      <article className="metric-card h-100">
-                        <p className="metric-label">State directory</p>
-                        <p className="metric-value metric-value--small">{health.settings.stateDirectory}</p>
-                      </article>
-                    </div>
-                    <div className="col-12 col-md-4">
-                      <article className="metric-card h-100">
-                        <p className="metric-label">Deletion workers</p>
-                        <p className="metric-value">{health.settings.deletionWorkers}</p>
-                      </article>
-                    </div>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
-            </div>
+            </section>
           </div>
-        </div>
+        )}
       </section>
     </main>
   );

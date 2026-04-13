@@ -18,3 +18,50 @@ export interface HealthResponse {
   settings: HealthSettings;
   deletionQueue: DeletionQueueSnapshot;
 }
+
+export interface ReviewPathsResponse {
+  knownPaths: string[];
+  hiddenPickerPaths: string[];
+}
+
+export interface AddReviewPathResponse {
+  addedPath: string;
+  knownPaths: string[];
+}
+
+export interface MediaStatus {
+  locked: boolean;
+  trashed: boolean;
+  seen: boolean;
+}
+
+export interface MediaMetadata {
+  width: number | null;
+  height: number | null;
+}
+
+export interface MediaItem {
+  path: string;
+  name: string;
+  mediaType: "image" | "video";
+  sizeBytes: number;
+  modifiedAt: string;
+  createdAt: string;
+  status: MediaStatus;
+  metadata: MediaMetadata;
+}
+
+export interface MediaItemsResponse {
+  path: string;
+  count: number;
+  ignoredCount: number;
+  items: MediaItem[];
+}
+
+export type MediaAction = "lock" | "trash" | "seen" | "unseen";
+
+export interface MediaActionResponse {
+  path: string;
+  action: MediaAction;
+  status: MediaStatus;
+}

@@ -29,6 +29,17 @@ npm run dev
 
 The Vite dev server proxies `/api` requests to the Flask API running on `http://127.0.0.1:5000`.
 
+## Dev helper script
+
+Use `./dev.sh` from the repository root to manage local workflows:
+
+- `./dev.sh start`: start backend and frontend dev servers.
+- `./dev.sh stop`: stop both dev servers.
+- `./dev.sh restart`: restart both dev servers.
+- `./dev.sh status`: show server status and log file paths.
+- `./dev.sh lint`: run backend and frontend lint suites.
+- `./dev.sh test`: run backend tests, frontend tests, and frontend build checks.
+
 ## Quality gates
 
 Every implementation request in this repository must:

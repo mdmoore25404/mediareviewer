@@ -12,5 +12,8 @@
   - implemented recursive media scanning with non-media filtering and typed payloads.
   - implemented companion actions endpoint for `lock`, `trash`, `seen`, and `unseen`.
   - validated backend changes with `ruff` and `pytest` (6 tests passing).
+  - implemented frontend prototype for path management, scanning, filtering, sorting, and actions.
+  - added root `dev.sh` helper for start/stop/restart/status/lint/test workflows.
+  - validated full backend and frontend suites through `./dev.sh lint` and `./dev.sh test`.
 - next target:
-  - implement frontend review path management and media browser UI using the new API routes.
+  - implement dedicated review-mode playback with next/back keyboard and touch navigation.

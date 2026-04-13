@@ -13,6 +13,8 @@
 - done: add folder picker API with hidden-path enforcement.
 - done: scan media folders and return typed review item summaries.
 - done: implement companion file actions for `lock`, `trash`, and `seen`.
-- planned: add review-mode navigation and media playback UI.
+- done: implement frontend review-path management and media browser controls.
+- done: wire frontend companion state actions for lock/trash/seen/unseen.
+- planned: add review-mode navigation and fullscreen media playback UI.
 - planned: add deletion queue endpoints and cancellation support.
 - planned: package the single-host deployment path for Docker and NAS usage.

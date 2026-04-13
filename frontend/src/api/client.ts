@@ -1,4 +1,20 @@
-import type { HealthResponse } from "./types";
+import type {
+  AddReviewPathResponse,
+  HealthResponse,
+  MediaAction,
+  MediaActionResponse,
+  MediaItemsResponse,
+  ReviewPathsResponse,
+} from "./types";
+
+async function parseJsonResponse<T>(response: Response): Promise<T> {
+  if (!response.ok) {
+    const errorPayload = (await response.json().catch(() => null)) as { error?: string } | null;
+    const details = errorPayload?.error ?? `Request failed with status ${response.status}.`;
+    throw new Error(details);
+  }
+  return (await response.json()) as T;
+}
 
 /** Fetch the current API status used by the initial application shell. */
 export async function fetchHealth(signal: AbortSignal): Promise<HealthResponse> {
@@ -9,9 +25,56 @@ export async function fetchHealth(signal: AbortSignal): Promise<HealthResponse> 
     signal,
   });
 
-  if (!response.ok) {
-    throw new Error(`Health request failed with status ${response.status}.`);
-  }
+  return parseJsonResponse<HealthResponse>(response);
+}
 
-  return (await response.json()) as HealthResponse;
+/** Fetch configured review paths and hidden picker path policies. */
+export async function fetchReviewPaths(signal: AbortSignal): Promise<ReviewPathsResponse> {
+  const response = await fetch("/api/review-paths", {
+    headers: {
+      Accept: "application/json",
+    },
+    signal,
+  });
+  return parseJsonResponse<ReviewPathsResponse>(response);
+}
+
+/** Add and persist a new review path. */
+export async function addReviewPath(path: string): Promise<AddReviewPathResponse> {
+  const response = await fetch("/api/review-paths", {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ path }),
+  });
+  return parseJsonResponse<AddReviewPathResponse>(response);
+}
+
+/** Scan a known review path for image and video items. */
+export async function fetchMediaItems(path: string, limit: number): Promise<MediaItemsResponse> {
+  const search = new URLSearchParams({
+    path,
+    limit: String(limit),
+  });
+  const response = await fetch(`/api/media-items?${search.toString()}`, {
+    headers: {
+      Accept: "application/json",
+    },
+  });
+  return parseJsonResponse<MediaItemsResponse>(response);
+}
+
+/** Apply lock/trash/seen/unseen state to a media item companion file set. */
+export async function applyMediaAction(path: string, action: MediaAction): Promise<MediaActionResponse> {
+  const response = await fetch("/api/media-actions", {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ path, action }),
+  });
+  return parseJsonResponse<MediaActionResponse>(response);
 }
