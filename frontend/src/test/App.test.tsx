@@ -178,6 +178,9 @@ describe("App", () => {
       expect(screen.getByText("frame001.jpg")).toBeInTheDocument();
     });
 
+    // Switch to "All" so the item remains visible after being marked seen
+    await user.selectOptions(screen.getByLabelText("Status"), "all");
+
     const cards = screen.getAllByTestId("media-item");
     const frame001Card = cards.find((card) => within(card).queryByText("frame001.jpg") !== null);
     expect(frame001Card).toBeTruthy();

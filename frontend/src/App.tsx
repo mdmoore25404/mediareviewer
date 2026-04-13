@@ -65,7 +65,7 @@ function App(): ReactElement {
   const [ignoredCount, setIgnoredCount] = useState<number>(0);
   const [scanLimit, setScanLimit] = useState<number>(20);
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("unseen");
   const [mediaFilter, setMediaFilter] = useState<MediaFilter>("all");
   const [sortOption, setSortOption] = useState<SortOption>("modified-asc");
   const [isBootLoading, setIsBootLoading] = useState<boolean>(true);
