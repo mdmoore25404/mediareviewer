@@ -63,11 +63,11 @@ function App(): ReactElement {
   const [newPathInput, setNewPathInput] = useState<string>("/home/michaelmoore/trailcam");
   const [mediaItems, setMediaItems] = useState<MediaItem[]>([]);
   const [ignoredCount, setIgnoredCount] = useState<number>(0);
-  const [scanLimit, setScanLimit] = useState<number>(50);
+  const [scanLimit, setScanLimit] = useState<number>(20);
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [mediaFilter, setMediaFilter] = useState<MediaFilter>("all");
-  const [sortOption, setSortOption] = useState<SortOption>("modified-desc");
+  const [sortOption, setSortOption] = useState<SortOption>("modified-asc");
   const [isBootLoading, setIsBootLoading] = useState<boolean>(true);
   const [isScanLoading, setIsScanLoading] = useState<boolean>(false);
   const [isFetchingMore, setIsFetchingMore] = useState<boolean>(false);
@@ -345,6 +345,11 @@ function App(): ReactElement {
   const showNextReviewItem = (): void => {
     if (displayedItems.length === 0 || activeReviewIndex === -1) {
       return;
+    }
+    // Pre-fetch the next batch when within 2 items of the end
+    const itemsFromEnd = displayedItems.length - 1 - activeReviewIndex;
+    if (itemsFromEnd <= 2 && hasMore && !isFetchingMore) {
+      void handleLoadMore();
     }
     setActiveReviewPath(displayedItems[(activeReviewIndex + 1) % displayedItems.length]?.path ?? null);
   };
