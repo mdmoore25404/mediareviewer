@@ -10,6 +10,6 @@
 
 ## Still open
 
-- choose the exact metadata probing toolchain for still images and videos.
+- image metadata probing uses Pillow; decide whether to add dedicated video duration/dimension probing.
 - decide whether hidden-path configuration should be allowlist-first or blocklist-first in the long term.
 - define the review item pagination and caching strategy once media scanning exists.

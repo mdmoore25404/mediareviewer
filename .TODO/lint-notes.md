@@ -8,3 +8,4 @@
 - Prefer TypeScript `--noEmit` validation in this repo so generated config artifacts do not break linting.
 - Prefer explicit return types on helpers even when inference would work.
 - Keep API documentation updated when routes or payloads change.
+- Keep pytest setup blocks wrapped across lines to stay inside the 100-character ruff limit.

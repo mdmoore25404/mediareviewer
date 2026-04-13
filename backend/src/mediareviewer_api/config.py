@@ -35,6 +35,13 @@ class AppSettings:
         default_factory=lambda: DEFAULT_HIDDEN_PICKER_PATHS,
     )
     deletion_workers: int = 2
+    config_file_name: str = "config.yaml"
+
+    @property
+    def config_file_path(self) -> Path:
+        """Return the path to the persistent user configuration file."""
+
+        return self.state_directory / self.config_file_name
 
     @classmethod
     def from_env(cls) -> "AppSettings":
