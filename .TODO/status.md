@@ -18,5 +18,7 @@
   - documented x86_64 and ARM64 (Apple Silicon) runtime portability expectations.
   - documented Docker multi-arch manifest requirements for linux/amd64 and linux/arm64.
   - moved frontend/backend listen and port configuration into `~/.mediareviewer/config.yaml` and wired `dev.sh` to report access URLs.
+  - added committed backend `requirements.txt` and `requirements-dev.txt` files.
+  - added YAML-configurable trusted hosts for Flask and Vite dev access beyond localhost.
 - next target:
   - implement dedicated review-mode playback with next/back keyboard and touch navigation.

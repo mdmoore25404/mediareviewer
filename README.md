@@ -15,9 +15,14 @@ Media Reviewer is a mobile-first web application for sorting large image and vid
 
 ```bash
 python3 -m venv backend/.venv
-./backend/.venv/bin/pip install -e "backend[dev]"
+./backend/.venv/bin/pip install -r backend/requirements-dev.txt
 ./backend/.venv/bin/mediareviewer-api
 ```
+
+Committed backend requirement files are available at:
+
+- `backend/requirements.txt`
+- `backend/requirements-dev.txt`
 
 ### Frontend
 
@@ -50,9 +55,17 @@ server:
 	backend_port: 5000
 	frontend_host: 0.0.0.0
 	frontend_port: 5173
+	trusted_hosts:
+	  - somehost
 ```
 
 Access URLs are printed by `./dev.sh status` and after `./dev.sh start`.
+
+`server.trusted_hosts` is for additional hostnames you expect to use when accessing the app, for example `http://somehost:<port>`.
+These hostnames are applied to:
+
+- Flask trusted host handling
+- Vite dev server allowed hosts
 
 ## Architecture Portability
 

@@ -16,6 +16,8 @@ def create_app(settings: AppSettings | None = None) -> Flask:
     resolved_settings = settings or AppSettings.from_env()
     app = Flask(__name__)
     app.config["MEDIAREVIEWER_SETTINGS"] = resolved_settings
+    if resolved_settings.trusted_hosts:
+        app.config["TRUSTED_HOSTS"] = list(resolved_settings.trusted_hosts)
     app.extensions["mediareviewer.deletion_queue"] = DeletionQueue(
         max_workers=resolved_settings.deletion_workers,
     )

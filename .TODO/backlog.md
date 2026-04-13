@@ -17,6 +17,7 @@
 - done: wire frontend companion state actions for lock/trash/seen/unseen.
 - done: document architecture portability and Docker multi-arch manifest expectations.
 - done: configure dev listen/ports through `~/.mediareviewer/config.yaml` and `dev.sh`.
+- done: add committed backend requirements files and YAML trusted-host support.
 - planned: add theme mode toggle with light, dark, and auto(system) options.
 - planned: add review-mode navigation and fullscreen media playback UI.
 - planned: add deletion queue endpoints and cancellation support.

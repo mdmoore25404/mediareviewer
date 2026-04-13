@@ -14,6 +14,7 @@ class DevServerSettings:
     backend_port: int = 5000
     frontend_host: str = "0.0.0.0"
     frontend_port: int = 5173
+    trusted_hosts: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,6 +54,11 @@ class ReviewConfigStore:
             backend_port=int(raw_server.get("backend_port", default_server.backend_port)),
             frontend_host=str(raw_server.get("frontend_host", default_server.frontend_host)),
             frontend_port=int(raw_server.get("frontend_port", default_server.frontend_port)),
+            trusted_hosts=tuple(
+                str(item)
+                for item in raw_server.get("trusted_hosts", default_server.trusted_hosts)
+                if isinstance(item, str) and item
+            ),
         )
 
         resolved_paths: list[Path] = []
@@ -84,6 +90,7 @@ class ReviewConfigStore:
                 "backend_port": config.server.backend_port,
                 "frontend_host": config.server.frontend_host,
                 "frontend_port": config.server.frontend_port,
+                "trusted_hosts": list(config.server.trusted_hosts),
             },
         }
         self._config_file_path.write_text(

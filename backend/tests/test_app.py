@@ -61,3 +61,29 @@ def test_settings_load_host_port_from_yaml(tmp_path: Path, monkeypatch: pytest.M
 
     assert settings.host == "0.0.0.0"
     assert settings.port == 5050
+
+
+def test_settings_load_trusted_hosts_from_yaml(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """App settings should load additional trusted hosts from YAML config."""
+
+    state_directory = tmp_path / "state"
+    state_directory.mkdir(parents=True)
+    config_path = state_directory / "config.yaml"
+    config_path.write_text(
+        "known_paths: []\n"
+        "server:\n"
+        "  backend_host: 127.0.0.1\n"
+        "  backend_port: 5200\n"
+        "  trusted_hosts:\n"
+        "    - somehost\n"
+        "    - mediareviewer.local\n",
+        encoding="utf-8",
+    )
+
+    monkeypatch.setenv("MEDIAREVIEWER_STATE_DIR", str(state_directory))
+    settings = AppSettings.from_env()
+
+    assert settings.trusted_hosts == ("somehost", "mediareviewer.local")

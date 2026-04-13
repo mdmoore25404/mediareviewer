@@ -15,6 +15,7 @@ BACKEND_PORT="5000"
 FRONTEND_HOST="0.0.0.0"
 FRONTEND_PORT="5173"
 API_PROXY_HOST="127.0.0.1"
+TRUSTED_HOSTS=()
 
 refresh_proxy_host() {
   if [[ "${BACKEND_HOST}" == "0.0.0.0" ]]; then
@@ -61,11 +62,13 @@ backend_host = str(server.get("backend_host", "127.0.0.1"))
 backend_port = int(server.get("backend_port", 5000))
 frontend_host = str(server.get("frontend_host", "0.0.0.0"))
 frontend_port = int(server.get("frontend_port", 5173))
+trusted_hosts = [str(item) for item in server.get("trusted_hosts", []) if isinstance(item, str) and item]
 
 print(backend_host)
 print(backend_port)
 print(frontend_host)
 print(frontend_port)
+print(",".join(trusted_hosts))
 PY
   )"
 
@@ -73,7 +76,30 @@ PY
   BACKEND_PORT="$(printf '%s\n' "${raw}" | sed -n '2p')"
   FRONTEND_HOST="$(printf '%s\n' "${raw}" | sed -n '3p')"
   FRONTEND_PORT="$(printf '%s\n' "${raw}" | sed -n '4p')"
+  IFS=',' read -r -a TRUSTED_HOSTS <<<"$(printf '%s\n' "${raw}" | sed -n '5p')"
   refresh_proxy_host
+}
+
+joined_trusted_hosts() {
+  local defaults=("localhost" "127.0.0.1")
+  local combined=()
+  local item
+
+  for item in "${defaults[@]}" "${TRUSTED_HOSTS[@]}"; do
+    if [[ -n "${item}" ]]; then
+      combined+=("${item}")
+    fi
+  done
+
+  local output=""
+  for item in "${combined[@]}"; do
+    if [[ -z "${output}" ]]; then
+      output="${item}"
+    else
+      output="${output},${item}"
+    fi
+  done
+  printf '%s' "${output}"
 }
 
 print_access_urls() {
@@ -143,6 +169,7 @@ start_frontend() {
 
   echo "starting frontend..."
   nohup env \
+    VITE_ALLOWED_HOSTS="$(joined_trusted_hosts)" \
     VITE_API_PROXY_TARGET="http://${API_PROXY_HOST}:${BACKEND_PORT}" \
     bash -lc "cd '${ROOT_DIR}/frontend' && npm run dev -- --host ${FRONTEND_HOST} --port ${FRONTEND_PORT} --strictPort" >"${FRONTEND_LOG}" 2>&1 &
   echo $! >"${FRONTEND_PID_FILE}"
@@ -192,6 +219,9 @@ status() {
   echo "  ${FRONTEND_LOG}"
   print_access_urls
   echo "  frontend proxy target: http://${API_PROXY_HOST}:${BACKEND_PORT}"
+  if [[ ${#TRUSTED_HOSTS[@]} -gt 0 ]]; then
+    echo "  additional trusted hosts: ${TRUSTED_HOSTS[*]}"
+  fi
 }
 
 run_lint() {
