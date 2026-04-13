@@ -4,7 +4,7 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import cast
 
-from flask import Blueprint, Response, current_app, jsonify, request
+from flask import Blueprint, Response, current_app, jsonify, request, send_file
 
 from mediareviewer_api.config import AppSettings
 from mediareviewer_api.services.companion_actions import CompanionActionService, CompanionStatus
@@ -122,6 +122,30 @@ def get_media_items() -> Response:
         "items": [item.to_payload() for item in scan_result.items],
     }
     return jsonify(payload)
+
+
+@api_blueprint.get("/media-file")
+def get_media_file() -> Response:
+    """Serve an image or video file under a configured review path."""
+
+    config_store = cast(
+        ReviewConfigStore,
+        current_app.extensions["mediareviewer.review_config_store"],
+    )
+
+    raw_path = request.args.get("path", type=str)
+    if not raw_path:
+        return jsonify({"error": "Query parameter 'path' is required."}), 400
+
+    media_path = Path(raw_path).expanduser().resolve()
+    if not media_path.exists() or not media_path.is_file():
+        return jsonify({"error": "Path must be an existing media file."}), 400
+
+    config = config_store.load()
+    if not _is_under_known_path(media_path, config.known_paths):
+        return jsonify({"error": "Path is not under a configured review path."}), 403
+
+    return send_file(media_path, conditional=True)
 
 
 @api_blueprint.post("/media-actions")

@@ -19,6 +19,6 @@
 - done: configure dev listen/ports through `~/.mediareviewer/config.yaml` and `dev.sh`.
 - done: add committed backend requirements files and YAML trusted-host support.
 - planned: add theme mode toggle with light, dark, and auto(system) options.
-- planned: add review-mode navigation and fullscreen media playback UI.
+- done: add thumbnails to grid/list views and fullscreen review mode.
 - planned: add deletion queue endpoints and cancellation support.
 - planned: package the single-host deployment path for Docker and NAS usage.

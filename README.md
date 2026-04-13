@@ -2,6 +2,14 @@
 
 Media Reviewer is a mobile-first web application for sorting large image and video sets into keep, trash, and review states without requiring a separate database. The repository is scaffolded as a Flask API plus a typed React frontend.
 
+The current prototype includes:
+
+- known review path management
+- recursive media scanning with non-media filtering
+- grid and list views with image/video previews
+- fullscreen review mode opened from a media card
+- lock, trash, seen, and unseen companion-file actions
+
 ## Workspace layout
 
 - `backend/`: Flask API, typed Python source, and pytest/ruff tooling.

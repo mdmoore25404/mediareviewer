@@ -78,3 +78,9 @@ export async function applyMediaAction(path: string, action: MediaAction): Promi
   });
   return parseJsonResponse<MediaActionResponse>(response);
 }
+
+/** Build a media streaming URL for preview thumbnails and fullscreen review mode. */
+export function buildMediaFileUrl(path: string): string {
+  const search = new URLSearchParams({ path });
+  return `/api/media-file?${search.toString()}`;
+}

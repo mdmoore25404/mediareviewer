@@ -20,5 +20,7 @@
   - moved frontend/backend listen and port configuration into `~/.mediareviewer/config.yaml` and wired `dev.sh` to report access URLs.
   - added committed backend `requirements.txt` and `requirements-dev.txt` files.
   - added YAML-configurable trusted hosts for Flask and Vite dev access beyond localhost.
+  - added image/video thumbnails to grid and list views using a protected media streaming endpoint.
+  - implemented fullscreen review mode with prev/next navigation and keyboard controls.
 - next target:
-  - implement dedicated review-mode playback with next/back keyboard and touch navigation.
+  - add deletion queue endpoints and the related frontend job status UI.

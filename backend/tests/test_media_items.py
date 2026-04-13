@@ -91,3 +91,61 @@ def test_media_items_requires_known_path(tmp_path: Path) -> None:
     assert response.status_code == 403
     assert response.get_json() == {"error": "Path is not configured as a known review path."}
 
+
+def test_media_file_serves_known_media_path(tmp_path: Path) -> None:
+    """The media file endpoint should stream files under configured review roots."""
+
+    state_directory = tmp_path / "state"
+    review_directory = tmp_path / "trailcam"
+    review_directory.mkdir(parents=True)
+    image_path = review_directory / "frame001.jpg"
+    Image.new("RGB", (8, 8), color=(32, 64, 96)).save(image_path)
+
+    state_directory.mkdir(parents=True)
+    (state_directory / "config.yaml").write_text(
+        "known_paths:\n  - " + str(review_directory.resolve()) + "\n",
+        encoding="utf-8",
+    )
+
+    settings = AppSettings(
+        state_directory=state_directory,
+        hidden_picker_paths=(),
+        deletion_workers=1,
+    )
+    app = create_app(settings)
+    client: FlaskClient = app.test_client()
+
+    response = client.get(
+        "/api/media-file",
+        query_string={"path": str(image_path.resolve())},
+    )
+
+    assert response.status_code == 200
+    assert response.mimetype == "image/jpeg"
+    assert len(response.data) > 0
+
+
+def test_media_file_rejects_unknown_path(tmp_path: Path) -> None:
+    """The media file endpoint should reject files outside configured review roots."""
+
+    state_directory = tmp_path / "state"
+    state_directory.mkdir(parents=True)
+    image_path = tmp_path / "frame001.jpg"
+    Image.new("RGB", (8, 8), color=(32, 64, 96)).save(image_path)
+
+    settings = AppSettings(
+        state_directory=state_directory,
+        hidden_picker_paths=(),
+        deletion_workers=1,
+    )
+    app = create_app(settings)
+    client: FlaskClient = app.test_client()
+
+    response = client.get(
+        "/api/media-file",
+        query_string={"path": str(image_path.resolve())},
+    )
+
+    assert response.status_code == 403
+    assert response.get_json() == {"error": "Path is not under a configured review path."}
+

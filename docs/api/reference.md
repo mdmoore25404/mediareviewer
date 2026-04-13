@@ -155,3 +155,22 @@ Applies a companion-file state action to a media file under a known review path.
 
 - `400`: request body invalid, unsupported action, or media path missing.
 - `403`: media path is outside configured known review paths.
+
+## GET /api/media-file
+
+Streams an image or video file under a configured review path for thumbnail display and fullscreen review mode.
+
+### Query Parameters
+
+- `path` (required): absolute media file path under a configured known review root.
+
+### Behavior
+
+- Image files can be used directly in `<img>` previews.
+- Video files can be used directly in `<video>` previews and fullscreen review playback.
+- Access is denied for files outside configured review paths.
+
+### Errors
+
+- `400`: missing `path` or file does not exist.
+- `403`: file is outside configured known review paths.

@@ -154,4 +154,26 @@ describe("App", () => {
       expect(screen.getAllByText("seen").length).toBeGreaterThan(0);
     });
   });
+
+  it("opens fullscreen review mode when a card body is clicked", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Scan media" })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole("button", { name: "Scan media" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("frame001.jpg")).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByTestId("media-item"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("review-dialog")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Close" })).toBeInTheDocument();
+    });
+  });
 });

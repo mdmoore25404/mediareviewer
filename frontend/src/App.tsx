@@ -1,8 +1,9 @@
-import { type ReactElement, useEffect, useMemo, useState } from "react";
+import { type KeyboardEvent, type ReactElement, useEffect, useMemo, useState } from "react";
 
 import {
   addReviewPath,
   applyMediaAction,
+  buildMediaFileUrl,
   fetchHealth,
   fetchMediaItems,
   fetchReviewPaths,
@@ -70,6 +71,7 @@ function App(): ReactElement {
   const [isSubmittingPath, setIsSubmittingPath] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [activeReviewPath, setActiveReviewPath] = useState<string | null>(null);
 
   useEffect(() => {
     const abortController = new AbortController();
@@ -126,6 +128,47 @@ function App(): ReactElement {
 
     return sortMediaItems(filteredByStatus, sortOption);
   }, [mediaFilter, mediaItems, sortOption, statusFilter]);
+
+  const activeReviewIndex = useMemo(() => {
+    if (!activeReviewPath) {
+      return -1;
+    }
+    return displayedItems.findIndex((item) => item.path === activeReviewPath);
+  }, [activeReviewPath, displayedItems]);
+
+  const activeReviewItem = activeReviewIndex >= 0 ? displayedItems[activeReviewIndex] : null;
+
+  useEffect(() => {
+    if (activeReviewPath && activeReviewIndex === -1) {
+      setActiveReviewPath(null);
+    }
+  }, [activeReviewIndex, activeReviewPath]);
+
+  useEffect(() => {
+    if (!activeReviewItem) {
+      return undefined;
+    }
+
+    const handleKeyDown = (event: globalThis.KeyboardEvent): void => {
+      if (event.key === "Escape") {
+        setActiveReviewPath(null);
+        return;
+      }
+      if (event.key === "ArrowRight") {
+        setActiveReviewPath(displayedItems[(activeReviewIndex + 1) % displayedItems.length]?.path ?? null);
+        return;
+      }
+      if (event.key === "ArrowLeft") {
+        const nextIndex = activeReviewIndex === 0 ? displayedItems.length - 1 : activeReviewIndex - 1;
+        setActiveReviewPath(displayedItems[nextIndex]?.path ?? null);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [activeReviewIndex, activeReviewItem, displayedItems]);
 
   const handleScan = async (): Promise<void> => {
     if (!selectedPath) {
@@ -193,6 +236,45 @@ function App(): ReactElement {
       const message = error instanceof Error ? error.message : "Unable to apply media action.";
       setErrorMessage(message);
     }
+  };
+
+  const openReviewMode = (itemPath: string): void => {
+    setActiveReviewPath(itemPath);
+  };
+
+  const handleCardKeyDown = (event: KeyboardEvent<HTMLElement>, itemPath: string): void => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      openReviewMode(itemPath);
+    }
+  };
+
+  const showPreviousReviewItem = (): void => {
+    if (displayedItems.length === 0 || activeReviewIndex === -1) {
+      return;
+    }
+    const nextIndex = activeReviewIndex === 0 ? displayedItems.length - 1 : activeReviewIndex - 1;
+    setActiveReviewPath(displayedItems[nextIndex]?.path ?? null);
+  };
+
+  const showNextReviewItem = (): void => {
+    if (displayedItems.length === 0 || activeReviewIndex === -1) {
+      return;
+    }
+    setActiveReviewPath(displayedItems[(activeReviewIndex + 1) % displayedItems.length]?.path ?? null);
+  };
+
+  const renderMediaPreview = (item: MediaItem, className: string): ReactElement => {
+    const mediaUrl = buildMediaFileUrl(item.path);
+    if (item.mediaType === "image") {
+      return <img className={className} src={mediaUrl} alt={item.name} loading="lazy" />;
+    }
+
+    return (
+      <video className={className} src={mediaUrl} muted playsInline preload="metadata">
+        <track kind="captions" />
+      </video>
+    );
   };
 
   return (
@@ -410,71 +492,92 @@ function App(): ReactElement {
                       key={item.path}
                       className={viewMode === "grid" ? "media-card" : "media-row"}
                       data-testid="media-item"
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => {
+                        openReviewMode(item.path);
+                      }}
+                      onKeyDown={(event) => {
+                        handleCardKeyDown(event, item.path);
+                      }}
                     >
-                      <div className="media-badge">
-                        <i
-                          className={
-                            item.mediaType === "image"
-                              ? "fa-regular fa-image"
-                              : "fa-solid fa-film"
-                          }
-                          aria-hidden="true"
-                        />
-                        <span>{item.mediaType}</span>
+                      <div className="media-preview-shell">
+                        {renderMediaPreview(item, "media-preview")}
                       </div>
-                      <h3 className="h6 mb-1 text-break">{item.name}</h3>
-                      <p className="small text-secondary mb-2 text-break">{item.path}</p>
-                      <p className="small mb-2">
-                        {formatSize(item.sizeBytes)} | modified {new Date(item.modifiedAt).toLocaleString()}
-                      </p>
-                      <div className="d-flex flex-wrap gap-2 mb-2">
-                        {item.status.locked && <span className="badge text-bg-primary">locked</span>}
-                        {item.status.trashed && <span className="badge text-bg-danger">trash</span>}
-                        {item.status.seen && <span className="badge text-bg-success">seen</span>}
-                        {!item.status.seen && <span className="badge text-bg-secondary">unseen</span>}
-                      </div>
-                      {item.metadata.width && item.metadata.height && (
-                        <p className="small text-secondary mb-2">
-                          {item.metadata.width} x {item.metadata.height}
+                      <div className="media-card-body">
+                        <div className="media-badge">
+                          <i
+                            className={
+                              item.mediaType === "image"
+                                ? "fa-regular fa-image"
+                                : "fa-solid fa-film"
+                            }
+                            aria-hidden="true"
+                          />
+                          <span>{item.mediaType}</span>
+                        </div>
+                        <h3 className="h6 mb-1 text-break">{item.name}</h3>
+                        <p className="small text-secondary mb-2 text-break">{item.path}</p>
+                        <p className="small mb-2">
+                          {formatSize(item.sizeBytes)} | modified {new Date(item.modifiedAt).toLocaleString()}
                         </p>
-                      )}
-                      <div className="d-flex flex-wrap gap-2">
-                        <button
-                          type="button"
-                          className="btn btn-sm btn-outline-primary"
-                          onClick={() => {
-                            void handleMediaAction(item.path, "lock");
+                        <div className="d-flex flex-wrap gap-2 mb-2">
+                          {item.status.locked && <span className="badge text-bg-primary">locked</span>}
+                          {item.status.trashed && <span className="badge text-bg-danger">trash</span>}
+                          {item.status.seen && <span className="badge text-bg-success">seen</span>}
+                          {!item.status.seen && <span className="badge text-bg-secondary">unseen</span>}
+                        </div>
+                        {item.metadata.width && item.metadata.height && (
+                          <p className="small text-secondary mb-2">
+                            {item.metadata.width} x {item.metadata.height}
+                          </p>
+                        )}
+                        <div
+                          className="d-flex flex-wrap gap-2"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                          }}
+                          onKeyDown={(event) => {
+                            event.stopPropagation();
                           }}
                         >
-                          Lock
-                        </button>
-                        <button
-                          type="button"
-                          className="btn btn-sm btn-outline-danger"
-                          onClick={() => {
-                            void handleMediaAction(item.path, "trash");
-                          }}
-                        >
-                          Trash
-                        </button>
-                        <button
-                          type="button"
-                          className="btn btn-sm btn-outline-success"
-                          onClick={() => {
-                            void handleMediaAction(item.path, "seen");
-                          }}
-                        >
-                          Seen
-                        </button>
-                        <button
-                          type="button"
-                          className="btn btn-sm btn-outline-secondary"
-                          onClick={() => {
-                            void handleMediaAction(item.path, "unseen");
-                          }}
-                        >
-                          Unseen
-                        </button>
+                          <button
+                            type="button"
+                            className="btn btn-sm btn-outline-primary"
+                            onClick={() => {
+                              void handleMediaAction(item.path, "lock");
+                            }}
+                          >
+                            Lock
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-sm btn-outline-danger"
+                            onClick={() => {
+                              void handleMediaAction(item.path, "trash");
+                            }}
+                          >
+                            Trash
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-sm btn-outline-success"
+                            onClick={() => {
+                              void handleMediaAction(item.path, "seen");
+                            }}
+                          >
+                            Seen
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-sm btn-outline-secondary"
+                            onClick={() => {
+                              void handleMediaAction(item.path, "unseen");
+                            }}
+                          >
+                            Unseen
+                          </button>
+                        </div>
                       </div>
                     </article>
                   ))}
@@ -488,6 +591,119 @@ function App(): ReactElement {
                 </div>
               </div>
             </section>
+          </div>
+        )}
+
+        {activeReviewItem && (
+          <div
+            className="review-overlay"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Review media item"
+            data-testid="review-dialog"
+          >
+            <div className="review-dialog">
+              <div className="review-toolbar">
+                <button
+                  type="button"
+                  className="btn btn-outline-light"
+                  onClick={() => {
+                    showPreviousReviewItem();
+                  }}
+                >
+                  Prev
+                </button>
+                <p className="review-counter mb-0">
+                  {activeReviewIndex + 1} / {displayedItems.length}
+                </p>
+                <button
+                  type="button"
+                  className="btn btn-outline-light"
+                  onClick={() => {
+                    showNextReviewItem();
+                  }}
+                >
+                  Next
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-light"
+                  onClick={() => {
+                    setActiveReviewPath(null);
+                  }}
+                >
+                  Close
+                </button>
+              </div>
+
+              <div className="review-media-shell">
+                {activeReviewItem.mediaType === "image" ? (
+                  <img
+                    className="review-media"
+                    src={buildMediaFileUrl(activeReviewItem.path)}
+                    alt={activeReviewItem.name}
+                  />
+                ) : (
+                  <video
+                    className="review-media"
+                    src={buildMediaFileUrl(activeReviewItem.path)}
+                    controls
+                    autoPlay
+                    playsInline
+                  >
+                    <track kind="captions" />
+                  </video>
+                )}
+              </div>
+
+              <div className="review-footer">
+                <div>
+                  <h2 className="h5 mb-1">{activeReviewItem.name}</h2>
+                  <p className="mb-1 text-break">{activeReviewItem.path}</p>
+                  <p className="mb-0 text-secondary">
+                    {formatSize(activeReviewItem.sizeBytes)} | modified {new Date(activeReviewItem.modifiedAt).toLocaleString()}
+                  </p>
+                </div>
+                <div className="d-flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    className="btn btn-outline-primary"
+                    onClick={() => {
+                      void handleMediaAction(activeReviewItem.path, "lock");
+                    }}
+                  >
+                    Lock
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-outline-danger"
+                    onClick={() => {
+                      void handleMediaAction(activeReviewItem.path, "trash");
+                    }}
+                  >
+                    Trash
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-outline-success"
+                    onClick={() => {
+                      void handleMediaAction(activeReviewItem.path, "seen");
+                    }}
+                  >
+                    Seen
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-outline-light"
+                    onClick={() => {
+                      void handleMediaAction(activeReviewItem.path, "unseen");
+                    }}
+                  >
+                    Unseen
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
         )}
       </section>
