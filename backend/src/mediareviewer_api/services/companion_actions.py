@@ -25,6 +25,7 @@ class CompanionActionService:
 
         if action == "lock":
             self._touch(lock_path)
+            self._touch(seen_path)
             self._remove_if_exists(trash_path)
         elif action == "unlock":
             self._remove_if_exists(lock_path)

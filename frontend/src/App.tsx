@@ -83,6 +83,7 @@ function App(): ReactElement {
   const [touchStartX, setTouchStartX] = useState<number | null>(null);
   const [touchStartY, setTouchStartY] = useState<number | null>(null);
   const [isFolderBrowserOpen, setIsFolderBrowserOpen] = useState<boolean>(false);
+  const [showVideoControls, setShowVideoControls] = useState<boolean>(false);
 
   useEffect(() => {
     const abortController = new AbortController();
@@ -863,11 +864,22 @@ function App(): ReactElement {
                       src={buildMediaFileUrl(activeReviewItem.path)}
                       autoPlay
                       playsInline
+                      controls={showVideoControls}
                       onClick={(event) => {
+                        if (showVideoControls) {
+                          // Controls visible: let the browser handle the click (scrubbing etc.)
+                          // but toggle them off with a double-tap gesture — handled via the
+                          // controls bar itself; single click falls through to native player.
+                          return;
+                        }
                         const vid = event.currentTarget;
                         if (vid.paused) void vid.play();
                         else vid.pause();
                       }}
+                      onDoubleClick={() => {
+                        setShowVideoControls((prev) => !prev);
+                      }}
+                      title={showVideoControls ? "Double-tap to hide controls" : "Double-tap to show seek controls"}
                     >
                       <track kind="captions" />
                     </video>
