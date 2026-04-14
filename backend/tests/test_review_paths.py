@@ -118,7 +118,10 @@ def test_get_review_paths_returns_persisted_values(tmp_path: Path) -> None:
     state_directory.mkdir(parents=True)
     known_path = tmp_path / "known"
     known_path.mkdir(parents=True)
+    available_path = tmp_path / "available"
+    available_path.mkdir(parents=True)
     (state_directory / "config.yaml").write_text(
+        "available_paths:\n  - " + str(available_path.resolve()) + "\n"
         "known_paths:\n  - " + str(known_path.resolve()) + "\n",
         encoding="utf-8",
     )
@@ -138,6 +141,7 @@ def test_get_review_paths_returns_persisted_values(tmp_path: Path) -> None:
     payload = response.get_json()
     assert payload == {
         "knownPaths": [str(known_path.resolve())],
+        "availablePaths": [str(available_path.resolve())],
         "hiddenPickerPaths": [str(hidden_path)],
     }
 

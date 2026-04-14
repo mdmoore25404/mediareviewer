@@ -155,6 +155,7 @@ def get_review_paths() -> Response:
     config = config_store.load()
     payload = {
         "knownPaths": [str(path) for path in config.known_paths],
+        "availablePaths": [str(path) for path in config.available_paths],
         "hiddenPickerPaths": [str(path) for path in settings.hidden_picker_paths],
     }
     return jsonify(payload)

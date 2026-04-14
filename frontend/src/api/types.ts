@@ -21,6 +21,7 @@ export interface HealthResponse {
 
 export interface ReviewPathsResponse {
   knownPaths: string[];
+  availablePaths: string[];
   hiddenPickerPaths: string[];
 }
 

@@ -4,9 +4,9 @@ import { fetchFolders } from "./api/client";
 import type { FolderInfo } from "./api/types";
 
 interface FolderBrowserProps {
-  /** Root paths the user has already configured; browses are anchored within them. */
-  knownPaths: string[];
-  /** Hidden picker paths from server config — filter from top-level navigation. */
+  /** Paths the user may browse from as roots (from server available_paths config). */
+  availablePaths: string[];
+  /** Hidden picker paths from server config — filter from children when loading. */
   hiddenPaths: string[];
   /** Called when the user selects a folder to use as the review root. */
   onSelectFolder: (path: string) => void;
@@ -22,16 +22,8 @@ interface FolderNode {
   error: string | null;
 }
 
-const FS_ROOT: FolderNode = {
-  info: { path: "/", name: "/", has_children: true },
-  children: null,
-  isLoading: false,
-  isExpanded: false,
-  error: null,
-};
-
-function buildRootNodes(knownPaths: string[]): FolderNode[] {
-  const knownNodes = knownPaths.map((path) => ({
+function buildRootNodes(availablePaths: string[]): FolderNode[] {
+  return availablePaths.map((path) => ({
     info: {
       path,
       name: path,
@@ -42,7 +34,6 @@ function buildRootNodes(knownPaths: string[]): FolderNode[] {
     isExpanded: false,
     error: null,
   }));
-  return [{ ...FS_ROOT }, ...knownNodes];
 }
 
 function updateNodeByPath(
@@ -146,16 +137,16 @@ function FolderNodeRow({ node, depth, onToggle, onSelect }: FolderNodeRowProps):
 }
 
 export function FolderBrowser({
-  knownPaths,
+  availablePaths,
   hiddenPaths,
   onSelectFolder,
   onClose,
 }: FolderBrowserProps): ReactElement {
-  const [nodes, setNodes] = useState<FolderNode[]>(() => buildRootNodes(knownPaths));
+  const [nodes, setNodes] = useState<FolderNode[]>(() => buildRootNodes(availablePaths));
 
   useEffect(() => {
-    setNodes(buildRootNodes(knownPaths));
-  }, [knownPaths]);
+    setNodes(buildRootNodes(availablePaths));
+  }, [availablePaths]);
 
   const handleToggle = useCallback(
     (path: string) => {
@@ -241,15 +232,21 @@ export function FolderBrowser({
         />
       </div>
       <div className="folder-browser-body p-2 overflow-auto">
-        {nodes.map((node) => (
-          <FolderNodeRow
-            key={node.info.path}
-            node={node}
-            depth={0}
-            onToggle={handleToggle}
-            onSelect={handleSelect}
-          />
-        ))}
+        {nodes.length === 0 ? (
+          <p className="small text-secondary p-2 mb-0">
+            No available browse paths configured.
+          </p>
+        ) : (
+          nodes.map((node) => (
+            <FolderNodeRow
+              key={node.info.path}
+              node={node}
+              depth={0}
+              onToggle={handleToggle}
+              onSelect={handleSelect}
+            />
+          ))
+        )}
       </div>
     </div>
   );

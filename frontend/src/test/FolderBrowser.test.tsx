@@ -5,15 +5,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FolderBrowser } from "../FolderBrowser";
 import type { FoldersResponse } from "../api/types";
 
-const rootFoldersResponse: FoldersResponse = {
-  path: "/",
-  folders: [
-    { path: "/home", name: "home", has_children: true },
-    { path: "/mnt", name: "mnt", has_children: true },
-    { path: "/proc", name: "proc", has_children: false },
-  ],
-};
-
 const foldersResponse: FoldersResponse = {
   path: "/home/michaelmoore/trailcam",
   folders: [
@@ -39,12 +30,6 @@ describe("FolderBrowser", () => {
 
       if (url.startsWith("/api/folders?")) {
         const folderParam = new URL(url, "http://localhost").searchParams.get("path");
-        if (folderParam === "/") {
-          return Promise.resolve({
-            ok: true,
-            json: () => Promise.resolve(rootFoldersResponse),
-          });
-        }
         if (folderParam === "/home/michaelmoore/trailcam/Videos") {
           return Promise.resolve({
             ok: true,
@@ -70,10 +55,10 @@ describe("FolderBrowser", () => {
     vi.restoreAllMocks();
   });
 
-  it("renders known paths as root folders", () => {
+  it("renders available paths as root folders", () => {
     render(
       <FolderBrowser
-        knownPaths={["/home/michaelmoore/trailcam"]}
+        availablePaths={["/home/michaelmoore/trailcam"]}
         hiddenPaths={[]}
         onSelectFolder={vi.fn()}
         onClose={vi.fn()}
@@ -83,23 +68,36 @@ describe("FolderBrowser", () => {
     expect(screen.getByText("/home/michaelmoore/trailcam")).toBeInTheDocument();
   });
 
-  it("always shows the filesystem root '/' as a browsable root", () => {
+  it("shows empty state when no available paths provided", () => {
     render(
       <FolderBrowser
-        knownPaths={[]}
+        availablePaths={[]}
         hiddenPaths={[]}
         onSelectFolder={vi.fn()}
         onClose={vi.fn()}
       />,
     );
 
-    expect(screen.getByRole("button", { name: /Expand \// })).toBeInTheDocument();
+    expect(screen.getByText(/No available browse paths configured/)).toBeInTheDocument();
+  });
+
+  it("always shows the filesystem root '/' as a browsable root", () => {
+    render(
+      <FolderBrowser
+        availablePaths={["/home/michaelmoore/trailcam"]}
+        hiddenPaths={[]}
+        onSelectFolder={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("/home/michaelmoore/trailcam")).toBeInTheDocument();
   });
 
   it("expands a root folder to show child folders", async () => {
     render(
       <FolderBrowser
-        knownPaths={["/home/michaelmoore/trailcam"]}
+        availablePaths={["/home/michaelmoore/trailcam"]}
         hiddenPaths={[]}
         onSelectFolder={vi.fn()}
         onClose={vi.fn()}
@@ -120,7 +118,7 @@ describe("FolderBrowser", () => {
   it("shows 'No subfolders' when a leaf folder is expanded", async () => {
     render(
       <FolderBrowser
-        knownPaths={["/home/michaelmoore/trailcam"]}
+        availablePaths={["/home/michaelmoore/trailcam"]}
         hiddenPaths={[]}
         onSelectFolder={vi.fn()}
         onClose={vi.fn()}
@@ -146,7 +144,7 @@ describe("FolderBrowser", () => {
 
     render(
       <FolderBrowser
-        knownPaths={["/home/michaelmoore/trailcam"]}
+        availablePaths={["/home/michaelmoore/trailcam"]}
         hiddenPaths={[]}
         onSelectFolder={onSelectFolder}
         onClose={onClose}
@@ -162,19 +160,18 @@ describe("FolderBrowser", () => {
   it("filters hidden paths from expanded children", async () => {
     render(
       <FolderBrowser
-        knownPaths={[]}
-        hiddenPaths={["/proc"]}
+        availablePaths={["/home/michaelmoore/trailcam"]}
+        hiddenPaths={["/home/michaelmoore/trailcam/DCIM"]}
         onSelectFolder={vi.fn()}
         onClose={vi.fn()}
       />,
     );
 
-    await userEvent.click(screen.getByRole("button", { name: /Expand \// }));
+    await userEvent.click(screen.getByRole("button", { name: /Expand \/home\/michaelmoore\/trailcam/ }));
 
     await waitFor(() => {
-      expect(screen.getByText("home")).toBeInTheDocument();
-      expect(screen.getByText("mnt")).toBeInTheDocument();
-      expect(screen.queryByText("proc")).not.toBeInTheDocument();
+      expect(screen.queryByText("DCIM")).not.toBeInTheDocument();
+      expect(screen.getByText("Videos")).toBeInTheDocument();
     });
   });
 
@@ -183,7 +180,7 @@ describe("FolderBrowser", () => {
 
     render(
       <FolderBrowser
-        knownPaths={["/home/michaelmoore/trailcam"]}
+        availablePaths={["/home/michaelmoore/trailcam"]}
         hiddenPaths={[]}
         onSelectFolder={vi.fn()}
         onClose={onClose}
@@ -198,7 +195,7 @@ describe("FolderBrowser", () => {
   it("collapses a folder when the expand button is clicked a second time", async () => {
     render(
       <FolderBrowser
-        knownPaths={["/home/michaelmoore/trailcam"]}
+        availablePaths={["/home/michaelmoore/trailcam"]}
         hiddenPaths={[]}
         onSelectFolder={vi.fn()}
         onClose={vi.fn()}

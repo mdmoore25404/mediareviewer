@@ -5,6 +5,8 @@ from pathlib import Path
 
 import yaml
 
+_DEFAULT_AVAILABLE_PATHS: tuple[Path, ...] = (Path.home(), Path("/mnt"))
+
 
 @dataclass(frozen=True, slots=True)
 class DevServerSettings:
@@ -22,6 +24,7 @@ class ReviewConfig:
     """Configuration persisted to ~/.mediareviewer/config.yaml."""
 
     known_paths: tuple[Path, ...]
+    available_paths: tuple[Path, ...]
     server: DevServerSettings
 
 
@@ -36,15 +39,35 @@ class ReviewConfigStore:
 
         default_server = DevServerSettings()
         if not self._config_file_path.exists():
-            return ReviewConfig(known_paths=(), server=default_server)
+            return ReviewConfig(
+                known_paths=(),
+                available_paths=_DEFAULT_AVAILABLE_PATHS,
+                server=default_server,
+            )
 
         raw_data = yaml.safe_load(self._config_file_path.read_text(encoding="utf-8"))
         if not isinstance(raw_data, dict):
-            return ReviewConfig(known_paths=(), server=default_server)
+            return ReviewConfig(
+                known_paths=(),
+                available_paths=_DEFAULT_AVAILABLE_PATHS,
+                server=default_server,
+            )
 
         raw_paths = raw_data.get("known_paths", [])
         if not isinstance(raw_paths, list):
             raw_paths = []
+
+        raw_available = raw_data.get("available_paths", [])
+        if not isinstance(raw_available, list):
+            raw_available = []
+        resolved_available: list[Path] = [
+            Path(item).expanduser().resolve()
+            for item in raw_available
+            if isinstance(item, str) and item
+        ]
+        available_paths = (
+            tuple(resolved_available) if resolved_available else _DEFAULT_AVAILABLE_PATHS
+        )
 
         raw_server = raw_data.get("server", {})
         if not isinstance(raw_server, dict):
@@ -65,7 +88,11 @@ class ReviewConfigStore:
         for item in raw_paths:
             if isinstance(item, str) and item:
                 resolved_paths.append(Path(item).expanduser().resolve())
-        return ReviewConfig(known_paths=tuple(resolved_paths), server=server)
+        return ReviewConfig(
+            known_paths=tuple(resolved_paths),
+            available_paths=available_paths,
+            server=server,
+        )
 
     def add_known_path(self, review_path: Path) -> ReviewConfig:
         """Add a known review path and persist the updated configuration."""
@@ -75,7 +102,11 @@ class ReviewConfigStore:
         combined = set(current.known_paths)
         combined.add(normalized)
         ordered_paths = tuple(sorted(combined, key=lambda value: str(value)))
-        updated = ReviewConfig(known_paths=ordered_paths, server=current.server)
+        updated = ReviewConfig(
+            known_paths=ordered_paths,
+            available_paths=current.available_paths,
+            server=current.server,
+        )
         self._write(updated)
         return updated
 
@@ -85,7 +116,11 @@ class ReviewConfigStore:
         current = self.load()
         normalized = review_path.expanduser().resolve()
         remaining = tuple(p for p in current.known_paths if p != normalized)
-        updated = ReviewConfig(known_paths=remaining, server=current.server)
+        updated = ReviewConfig(
+            known_paths=remaining,
+            available_paths=current.available_paths,
+            server=current.server,
+        )
         self._write(updated)
         return updated
 
@@ -94,6 +129,7 @@ class ReviewConfigStore:
 
         self._config_file_path.parent.mkdir(parents=True, exist_ok=True)
         payload = {
+            "available_paths": [str(path) for path in config.available_paths],
             "known_paths": [str(path) for path in config.known_paths],
             "server": {
                 "backend_host": config.server.backend_host,

@@ -200,22 +200,35 @@ class MediaScanner:
         return ScanResult(items=tuple(items), ignored_count=ignored_count)
 
     def get_folders(self, parent_path: Path) -> tuple[FolderInfo, ...]:
-        """Get sorted list of immediate child folders."""
+        """Get sorted list of immediate child folders.
+
+        Directories that cannot be read due to permission restrictions are
+        silently skipped rather than raising a 500 error to the caller.
+        """
 
         normalized_parent = parent_path.expanduser().resolve()
         if not normalized_parent.is_dir():
-             return ()
+            return ()
+
+        try:
+            entries = sorted(normalized_parent.iterdir())
+        except PermissionError:
+            return ()
 
         folders: list[FolderInfo] = []
-        for item in sorted(normalized_parent.iterdir()):
-            if item.is_dir() and not item.name.startswith("."):
+        for item in entries:
+            if not item.is_dir() or item.name.startswith("."):
+                continue
+            try:
                 has_children = any(
                     child.is_dir() and not child.name.startswith(".")
                     for child in item.iterdir()
                 )
-                folders.append(
-                    FolderInfo(path=str(item), name=item.name, has_children=has_children)
-                )
+            except PermissionError:
+                has_children = False
+            folders.append(
+                FolderInfo(path=str(item), name=item.name, has_children=has_children)
+            )
 
         return tuple(folders)
 

@@ -24,6 +24,7 @@ const healthResponse: HealthResponse = {
 
 const reviewPathsResponse: ReviewPathsResponse = {
   knownPaths: ["/home/michaelmoore/trailcam"],
+  availablePaths: ["/home/michaelmoore", "/mnt"],
   hiddenPickerPaths: ["/proc"],
 };
 

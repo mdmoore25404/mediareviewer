@@ -65,6 +65,7 @@ function App(): ReactElement {
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [knownPaths, setKnownPaths] = useState<string[]>([]);
   const [hiddenPaths, setHiddenPaths] = useState<string[]>([]);
+  const [availablePaths, setAvailablePaths] = useState<string[]>([]);
   const [selectedPath, setSelectedPath] = useState<string>("");
   const [newPathInput, setNewPathInput] = useState<string>("/home/michaelmoore/trailcam");
   const [mediaItems, setMediaItems] = useState<MediaItem[]>([]);
@@ -105,6 +106,7 @@ function App(): ReactElement {
         setHealth(healthPayload);
         setKnownPaths(pathsPayload.knownPaths);
         setHiddenPaths(pathsPayload.hiddenPickerPaths);
+        setAvailablePaths(pathsPayload.availablePaths);
         if (pathsPayload.knownPaths.length > 0) {
           setSelectedPath(pathsPayload.knownPaths[0]);
         }
@@ -540,7 +542,7 @@ function App(): ReactElement {
 
                 {isFolderBrowserOpen && (
                   <FolderBrowser
-                    knownPaths={knownPaths}
+                    availablePaths={availablePaths}
                     hiddenPaths={hiddenPaths}
                     onSelectFolder={(path) => {
                       setNewPathInput(path);
