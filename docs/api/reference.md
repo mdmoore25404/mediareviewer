@@ -74,6 +74,32 @@ Adds and persists a known review path.
 - `400`: request body missing or `path` invalid.
 - `403`: path is under hidden picker policy.
 
+## DELETE /api/review-paths
+
+Removes a known review path from `~/.mediareviewer/config.yaml`. The directory is not required to exist on disk.
+
+### Request
+
+```json
+{
+  "path": "/home/michaelmoore/trailcam"
+}
+```
+
+### Success Response
+
+```json
+{
+  "removedPath": "/home/michaelmoore/trailcam",
+  "knownPaths": []
+}
+```
+
+### Errors
+
+- `400`: request body missing or `path` invalid.
+- `404`: path is not a configured known review path.
+
 ## GET /api/folders
 
 Returns immediate child folders under a parent directory. Hidden folders (starting with `.`) are excluded.

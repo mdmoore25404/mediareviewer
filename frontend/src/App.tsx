@@ -8,6 +8,7 @@ import {
   emptyTrash,
   fetchHealth,
   fetchReviewPaths,
+  removeReviewPath,
   streamMediaItems,
 } from "./api/client";
 import type { HealthResponse, MediaAction, MediaItem, StatusFilter } from "./api/types";
@@ -80,6 +81,7 @@ function App(): ReactElement {
   const scanAbortRef = useRef<AbortController | null>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
   const [isSubmittingPath, setIsSubmittingPath] = useState<boolean>(false);
+  const [isRemovingPath, setIsRemovingPath] = useState<boolean>(false);
   const [isEmptyingTrash, setIsEmptyingTrash] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
@@ -337,6 +339,26 @@ function App(): ReactElement {
     }
   };
 
+  const handleRemovePath = async (): Promise<void> => {
+    if (!selectedPath) return;
+    setIsRemovingPath(true);
+    setStatusMessage(null);
+    setErrorMessage(null);
+    try {
+      const payload = await removeReviewPath(selectedPath);
+      setKnownPaths(payload.knownPaths);
+      setSelectedPath(payload.knownPaths[0] ?? "");
+      setStatusMessage(`Removed review path: ${payload.removedPath}`);
+      setMediaItems([]);
+      setHasMore(false);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Unable to remove review path.";
+      setErrorMessage(message);
+    } finally {
+      setIsRemovingPath(false);
+    }
+  };
+
   const handleMediaAction = async (itemPath: string, action: MediaAction): Promise<void> => {
     setErrorMessage(null);
     try {
@@ -546,6 +568,16 @@ function App(): ReactElement {
                     </option>
                   ))}
                 </select>
+                <button
+                  type="button"
+                  className="btn btn-outline-danger btn-sm mt-2"
+                  onClick={() => {
+                    void handleRemovePath();
+                  }}
+                  disabled={!selectedPath || isRemovingPath}
+                >
+                  {isRemovingPath ? "Removing..." : "Remove selected path"}
+                </button>
 
                 <div className="metric-card mt-3">
                   <p className="metric-label">API status</p>

@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import App from "../App";
-import type { HealthResponse, MediaActionResponse, MediaItem, ReviewPathsResponse } from "../api/types";
+import type { HealthResponse, MediaActionResponse, MediaItem, RemoveReviewPathResponse, ReviewPathsResponse } from "../api/types";
 
 const healthResponse: HealthResponse = {
   status: "ok",
@@ -113,6 +113,17 @@ describe("App", () => {
         return Promise.resolve({
           ok: true,
           json: () => Promise.resolve(reviewPathsResponse),
+        });
+      }
+
+      if (url.endsWith("/api/review-paths") && init?.method === "DELETE") {
+        const removeResponse: RemoveReviewPathResponse = {
+          removedPath: "/home/michaelmoore/trailcam",
+          knownPaths: [],
+        };
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve(removeResponse),
         });
       }
 
@@ -269,6 +280,29 @@ describe("App", () => {
     await waitFor(() => {
       expect(within(reviewDialog).getByRole("heading", { name: "frame002.jpg" })).toBeInTheDocument();
     });
+  });
+
+  it("removes selected review path and updates the known-paths list", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("Known path")).toHaveValue("/home/michaelmoore/trailcam");
+    });
+
+    const removeButton = screen.getByRole("button", { name: "Remove selected path" });
+    expect(removeButton).not.toBeDisabled();
+
+    await user.click(removeButton);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Removed review path:/i)).toBeInTheDocument();
+      expect(screen.getByLabelText("Known path")).toHaveValue("");
+    });
+
+    const calls = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls as [string, RequestInit][];
+    const deleteCall = calls.find(([url, init]) => url.endsWith("/api/review-paths") && init?.method === "DELETE");
+    expect(deleteCall).toBeTruthy();
   });
 
   it("includes statusFilter in the stream request URL", async () => {

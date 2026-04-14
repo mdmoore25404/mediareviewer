@@ -193,6 +193,40 @@ def add_review_path() -> Response:
     return jsonify(payload), 201
 
 
+@api_blueprint.delete("/review-paths")
+def remove_review_path() -> Response:
+    """Remove a configured review path from the persisted known-paths list.
+
+    The path does not need to exist on disk — this only edits the YAML
+    configuration.  Hidden-path policy is not enforced for removal.
+    """
+
+    config_store = cast(
+        ReviewConfigStore,
+        current_app.extensions["mediareviewer.review_config_store"],
+    )
+
+    request_body = request.get_json(silent=True)
+    if not isinstance(request_body, dict):
+        return jsonify({"error": "Expected JSON object body."}), 400
+
+    raw_path = request_body.get("path")
+    if not isinstance(raw_path, str) or not raw_path.strip():
+        return jsonify({"error": "Field 'path' must be a non-empty string."}), 400
+
+    review_path = Path(raw_path).expanduser().resolve()
+    current = config_store.load()
+    if review_path not in current.known_paths:
+        return jsonify({"error": "Path is not a configured known review path."}), 404
+
+    updated = config_store.remove_known_path(review_path)
+    payload = {
+        "removedPath": str(review_path),
+        "knownPaths": [str(path) for path in updated.known_paths],
+    }
+    return jsonify(payload)
+
+
 @api_blueprint.get("/media-items/stream")
 def stream_media_items() -> Response:
     """Stream media items as NDJSON, yielding each item as soon as it is found.

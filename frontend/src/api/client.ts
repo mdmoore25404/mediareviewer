@@ -8,6 +8,7 @@ import type {
   MediaActionResponse,
   MediaItem,
   MediaStreamDone,
+  RemoveReviewPathResponse,
   ReviewPathsResponse,
   StatusFilter,
 } from "./types";
@@ -55,6 +56,19 @@ export async function addReviewPath(path: string): Promise<AddReviewPathResponse
     body: JSON.stringify({ path }),
   });
   return parseJsonResponse<AddReviewPathResponse>(response);
+}
+
+/** Remove a configured review path from the persisted known-paths list. */
+export async function removeReviewPath(path: string): Promise<RemoveReviewPathResponse> {
+  const response = await fetch("/api/review-paths", {
+    method: "DELETE",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ path }),
+  });
+  return parseJsonResponse<RemoveReviewPathResponse>(response);
 }
 
 /**

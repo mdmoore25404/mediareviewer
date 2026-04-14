@@ -79,6 +79,16 @@ class ReviewConfigStore:
         self._write(updated)
         return updated
 
+    def remove_known_path(self, review_path: Path) -> ReviewConfig:
+        """Remove a known review path and persist the updated configuration."""
+
+        current = self.load()
+        normalized = review_path.expanduser().resolve()
+        remaining = tuple(p for p in current.known_paths if p != normalized)
+        updated = ReviewConfig(known_paths=remaining, server=current.server)
+        self._write(updated)
+        return updated
+
     def _write(self, config: ReviewConfig) -> None:
         """Write the YAML configuration file, creating the parent directory if needed."""
 

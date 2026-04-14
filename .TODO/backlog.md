@@ -32,7 +32,7 @@
 - planned: batch actions — multi-select grid items and apply seen/trash/lock in one operation.
 - planned: review progress indicator — show remaining-unseen counter or thin progress bar in the review dialog header.
 - planned: single-level undo — store last action+item in React state; show an Undo button in the review toolbar for ~5 seconds after any action.
-- planned: remove review path — `DELETE /api/review-paths` endpoint and Remove button in the sidebar path list.
+- done: remove review path — `DELETE /api/review-paths` endpoint and Remove button in the sidebar path list.
 - planned: quick-jump to next locked item — toolbar button in review mode to skip forward to the next locked item without changing the status filter.
 - planned: prevent double-click action bleed in review mode — debounce or disable buttons during in-flight API calls.
 - planned: generate and maintain Mermaid architecture diagrams in `docs/` via a script or agent skill; re-runnable after structural changes.

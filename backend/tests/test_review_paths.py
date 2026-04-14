@@ -140,3 +140,63 @@ def test_get_review_paths_returns_persisted_values(tmp_path: Path) -> None:
         "knownPaths": [str(known_path.resolve())],
         "hiddenPickerPaths": [str(hidden_path)],
     }
+
+
+def test_remove_review_path_removes_entry(tmp_path: Path) -> None:
+    """DELETE /api/review-paths should remove the path and return the updated list."""
+
+    state_directory = tmp_path / "state"
+    state_directory.mkdir(parents=True)
+    path_a = tmp_path / "path_a"
+    path_b = tmp_path / "path_b"
+    path_a.mkdir()
+    path_b.mkdir()
+    (state_directory / "config.yaml").write_text(
+        "known_paths:\n  - " + str(path_a.resolve()) + "\n  - " + str(path_b.resolve()) + "\n",
+        encoding="utf-8",
+    )
+
+    settings = AppSettings(
+        state_directory=state_directory,
+        hidden_picker_paths=(),
+        deletion_workers=1,
+    )
+    app = create_app(settings)
+    client: FlaskClient = app.test_client()
+
+    response = client.delete("/api/review-paths", json={"path": str(path_a.resolve())})
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload == {
+        "removedPath": str(path_a.resolve()),
+        "knownPaths": [str(path_b.resolve())],
+    }
+    config_content = (state_directory / "config.yaml").read_text(encoding="utf-8")
+    assert str(path_a.resolve()) not in config_content
+    assert str(path_b.resolve()) in config_content
+
+
+def test_remove_review_path_returns_404_for_unknown_path(tmp_path: Path) -> None:
+    """DELETE /api/review-paths should return 404 when the path is not configured."""
+
+    state_directory = tmp_path / "state"
+    state_directory.mkdir(parents=True)
+    (state_directory / "config.yaml").write_text(
+        "known_paths: []\n",
+        encoding="utf-8",
+    )
+
+    settings = AppSettings(
+        state_directory=state_directory,
+        hidden_picker_paths=(),
+        deletion_workers=1,
+    )
+    app = create_app(settings)
+    client: FlaskClient = app.test_client()
+
+    response = client.delete("/api/review-paths", json={"path": str(tmp_path / "nonexistent")})
+
+    assert response.status_code == 404
+    payload = response.get_json()
+    assert "error" in payload

@@ -29,6 +29,11 @@ export interface AddReviewPathResponse {
   knownPaths: string[];
 }
 
+export interface RemoveReviewPathResponse {
+  removedPath: string;
+  knownPaths: string[];
+}
+
 export interface MediaStatus {
   locked: boolean;
   trashed: boolean;
