@@ -15,7 +15,7 @@ from mediareviewer_api.services.companion_actions import (
     LockedItemError,
 )
 from mediareviewer_api.services.deletion_queue import DeletionQueue, DeletionQueueSnapshot
-from mediareviewer_api.services.media_scanner import MediaScanner
+from mediareviewer_api.services.media_scanner import MediaScanner, StatusFilter
 from mediareviewer_api.services.review_config_store import ReviewConfigStore
 from mediareviewer_api.services.thumbnail_cache import ThumbnailCacheService
 
@@ -223,6 +223,16 @@ def stream_media_items() -> Response:
     if offset < 0:
         return jsonify({"error": "Query parameter 'offset' must be >= 0."}), 400
 
+    raw_status_filter = request.args.get("statusFilter", default="all", type=str)
+    valid_status_filters = {"all", "unseen", "seen", "locked", "trashed"}
+    if raw_status_filter not in valid_status_filters:
+        msg = (
+            "Query parameter 'statusFilter' must be one of:"
+            " all, unseen, seen, locked, trashed."
+        )
+        return jsonify({"error": msg}), 400
+    status_filter: StatusFilter = raw_status_filter  # type: ignore[assignment]
+
     requested_path = Path(raw_path).expanduser().resolve()
     config = config_store.load()
     if requested_path not in config.known_paths:
@@ -231,7 +241,12 @@ def stream_media_items() -> Response:
     @stream_with_context
     def generate() -> Response:
         count = 0
-        for item in media_scanner.scan_stream(root_path=requested_path, limit=limit, offset=offset):
+        for item in media_scanner.scan_stream(
+            root_path=requested_path,
+            limit=limit,
+            offset=offset,
+            status_filter=status_filter,
+        ):
             item_payload = item.to_payload()
             item_payload["thumbnailUrl"] = _build_media_thumbnail_url(item.path, 256)
             yield json.dumps(item_payload) + "\n"

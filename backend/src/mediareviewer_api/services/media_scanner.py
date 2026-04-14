@@ -4,6 +4,7 @@ from collections.abc import Iterator
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Literal
 
 from PIL import Image, UnidentifiedImageError
 
@@ -35,6 +36,8 @@ VIDEO_EXTENSIONS: frozenset[str] = frozenset(
 )
 
 COMPANION_SUFFIXES: frozenset[str] = frozenset({".lock", ".trash", ".seen"})
+
+StatusFilter = Literal["all", "unseen", "seen", "locked", "trashed"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -125,12 +128,23 @@ class MediaScanner:
 
         return ScanResult(items=tuple(items), ignored_count=ignored_count)
 
-    def scan_stream(self, root_path: Path, limit: int, offset: int = 0) -> Iterator[MediaItem]:
+    def scan_stream(
+        self, root_path: Path, limit: int, offset: int = 0, status_filter: StatusFilter = "all"
+    ) -> Iterator[MediaItem]:
         """Yield media items one at a time as they are discovered, up to *limit*.
 
-        *offset* media items that would otherwise be yielded are skipped first,
-        enabling simple page-based pagination over consecutive calls.  Hidden
-        directories (names starting with ``'.'``) and companion files are
+        *offset* media items that pass the *status_filter* (and would otherwise
+        be yielded) are skipped first, enabling page-based pagination.
+        *status_filter* is applied on the filesystem before counting against
+        *offset* or *limit*, so every page contains only matching items.
+
+        - ``"all"``    — no filtering; return every media file.
+        - ``"unseen"`` — items without a ``.seen`` companion file.
+        - ``"seen"``   — items with a ``.seen`` companion file.
+        - ``"locked"`` — items with a ``.lock`` companion file.
+        - ``"trashed"``— items with a ``.trash`` companion file.
+
+        Hidden directories (names starting with ``'.'``) and companion files are
         skipped silently and do **not** count against *offset* or *limit*.
         """
 
@@ -146,6 +160,8 @@ class MediaScanner:
                 continue
             media_type = self._detect_media_type(candidate)
             if media_type is None:
+                continue
+            if not self._matches_status_filter(candidate, status_filter):
                 continue
             if skipped < offset:
                 skipped += 1
@@ -202,6 +218,23 @@ class MediaScanner:
                 )
 
         return tuple(folders)
+
+    def _matches_status_filter(self, file_path: Path, status_filter: StatusFilter) -> bool:
+        """Return True if *file_path* satisfies the requested status filter."""
+        if status_filter == "all":
+            return True
+        lock_exists = file_path.with_suffix(f"{file_path.suffix}.lock").exists()
+        trash_exists = file_path.with_suffix(f"{file_path.suffix}.trash").exists()
+        seen_exists = file_path.with_suffix(f"{file_path.suffix}.seen").exists()
+        if status_filter == "unseen":
+            return not seen_exists
+        if status_filter == "seen":
+            return seen_exists
+        if status_filter == "locked":
+            return lock_exists
+        if status_filter == "trashed":
+            return trash_exists
+        return True  # unreachable but satisfies exhaustiveness
 
     def _detect_media_type(self, file_path: Path) -> str | None:
         suffix = file_path.suffix.lower()

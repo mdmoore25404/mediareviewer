@@ -337,3 +337,189 @@ def test_stream_media_items_offset_pagination(tmp_path: Path) -> None:
     assert second_names == ["img_03.jpg"]
     assert second_done == {"type": "done", "count": 1}
 
+
+def _make_stream_client(tmp_path: Path) -> tuple["FlaskClient", Path]:
+    """Create a test Flask client with a single review directory."""
+    import json as _json  # noqa: F401 — callers use json directly
+
+    state_directory = tmp_path / "state"
+    review_directory = tmp_path / "trailcam"
+    review_directory.mkdir(parents=True)
+
+    state_directory.mkdir(parents=True)
+    (state_directory / "config.yaml").write_text(
+        "known_paths:\n  - " + str(review_directory.resolve()) + "\n",
+        encoding="utf-8",
+    )
+    settings = AppSettings(
+        state_directory=state_directory,
+        hidden_picker_paths=(),
+        deletion_workers=1,
+    )
+    app = create_app(settings)
+    return app.test_client(), review_directory
+
+
+def test_stream_status_filter_unseen(tmp_path: Path) -> None:
+    """statusFilter=unseen must return only items without a .seen companion file."""
+
+    import json
+
+    client, review_directory = _make_stream_client(tmp_path)
+
+    Image.new("RGB", (8, 8)).save(review_directory / "seen.jpg")
+    (review_directory / "seen.jpg.seen").write_text("", encoding="utf-8")
+    Image.new("RGB", (8, 8)).save(review_directory / "unseen.jpg")
+
+    response = client.get(
+        "/api/media-items/stream",
+        query_string={
+            "path": str(review_directory.resolve()),
+            "limit": "10",
+            "statusFilter": "unseen",
+        },
+    )
+
+    assert response.status_code == 200
+    lines = [ln for ln in response.data.decode().splitlines() if ln.strip()]
+    item_names = [json.loads(ln)["name"] for ln in lines[:-1]]
+    assert item_names == ["unseen.jpg"]
+
+
+def test_stream_status_filter_seen(tmp_path: Path) -> None:
+    """statusFilter=seen must return only items with a .seen companion file."""
+
+    import json
+
+    client, review_directory = _make_stream_client(tmp_path)
+
+    Image.new("RGB", (8, 8)).save(review_directory / "seen.jpg")
+    (review_directory / "seen.jpg.seen").write_text("", encoding="utf-8")
+    Image.new("RGB", (8, 8)).save(review_directory / "unseen.jpg")
+
+    response = client.get(
+        "/api/media-items/stream",
+        query_string={
+            "path": str(review_directory.resolve()),
+            "limit": "10",
+            "statusFilter": "seen",
+        },
+    )
+
+    assert response.status_code == 200
+    lines = [ln for ln in response.data.decode().splitlines() if ln.strip()]
+    item_names = [json.loads(ln)["name"] for ln in lines[:-1]]
+    assert item_names == ["seen.jpg"]
+
+
+def test_stream_status_filter_locked(tmp_path: Path) -> None:
+    """statusFilter=locked must return only items with a .lock companion file."""
+
+    import json
+
+    client, review_directory = _make_stream_client(tmp_path)
+
+    Image.new("RGB", (8, 8)).save(review_directory / "locked.jpg")
+    (review_directory / "locked.jpg.lock").write_text("", encoding="utf-8")
+    Image.new("RGB", (8, 8)).save(review_directory / "unlocked.jpg")
+
+    response = client.get(
+        "/api/media-items/stream",
+        query_string={
+            "path": str(review_directory.resolve()),
+            "limit": "10",
+            "statusFilter": "locked",
+        },
+    )
+
+    assert response.status_code == 200
+    lines = [ln for ln in response.data.decode().splitlines() if ln.strip()]
+    item_names = [json.loads(ln)["name"] for ln in lines[:-1]]
+    assert item_names == ["locked.jpg"]
+
+
+def test_stream_status_filter_trashed(tmp_path: Path) -> None:
+    """statusFilter=trashed must return only items with a .trash companion file."""
+
+    import json
+
+    client, review_directory = _make_stream_client(tmp_path)
+
+    Image.new("RGB", (8, 8)).save(review_directory / "trashed.jpg")
+    (review_directory / "trashed.jpg.trash").write_text("", encoding="utf-8")
+    Image.new("RGB", (8, 8)).save(review_directory / "kept.jpg")
+
+    response = client.get(
+        "/api/media-items/stream",
+        query_string={
+            "path": str(review_directory.resolve()),
+            "limit": "10",
+            "statusFilter": "trashed",
+        },
+    )
+
+    assert response.status_code == 200
+    lines = [ln for ln in response.data.decode().splitlines() if ln.strip()]
+    item_names = [json.loads(ln)["name"] for ln in lines[:-1]]
+    assert item_names == ["trashed.jpg"]
+
+
+def test_stream_status_filter_invalid(tmp_path: Path) -> None:
+    """An unrecognised statusFilter value must be rejected with 400."""
+
+    client, review_directory = _make_stream_client(tmp_path)
+
+    response = client.get(
+        "/api/media-items/stream",
+        query_string={
+            "path": str(review_directory.resolve()),
+            "limit": "10",
+            "statusFilter": "bogus",
+        },
+    )
+
+    assert response.status_code == 400
+    assert "statusFilter" in response.get_json()["error"]
+
+
+def test_stream_status_filter_unseen_respects_limit_and_offset(tmp_path: Path) -> None:
+    """statusFilter=unseen pagination: limit and offset apply only to matching items."""
+
+    import json
+
+    client, review_directory = _make_stream_client(tmp_path)
+
+    # Three unseen, one seen — the seen one must never appear
+    for name in ("a.jpg", "b.jpg", "c.jpg"):
+        Image.new("RGB", (8, 8)).save(review_directory / name)
+    Image.new("RGB", (8, 8)).save(review_directory / "d_seen.jpg")
+    (review_directory / "d_seen.jpg.seen").write_text("", encoding="utf-8")
+
+    # Page 1: offset=0, limit=2 → a, b
+    r1 = client.get(
+        "/api/media-items/stream",
+        query_string={
+            "path": str(review_directory.resolve()),
+            "limit": "2",
+            "offset": "0",
+            "statusFilter": "unseen",
+        },
+    )
+    lines1 = [ln for ln in r1.data.decode().splitlines() if ln.strip()]
+    assert [json.loads(ln)["name"] for ln in lines1[:-1]] == ["a.jpg", "b.jpg"]
+    assert json.loads(lines1[-1]) == {"type": "done", "count": 2}
+
+    # Page 2: offset=2, limit=2 → c only (d_seen excluded by filter)
+    r2 = client.get(
+        "/api/media-items/stream",
+        query_string={
+            "path": str(review_directory.resolve()),
+            "limit": "2",
+            "offset": "2",
+            "statusFilter": "unseen",
+        },
+    )
+    lines2 = [ln for ln in r2.data.decode().splitlines() if ln.strip()]
+    assert [json.loads(ln)["name"] for ln in lines2[:-1]] == ["c.jpg"]
+    assert json.loads(lines2[-1]) == {"type": "done", "count": 1}
+

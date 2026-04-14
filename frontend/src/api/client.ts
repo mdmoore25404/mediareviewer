@@ -9,6 +9,7 @@ import type {
   MediaItem,
   MediaStreamDone,
   ReviewPathsResponse,
+  StatusFilter,
 } from "./types";
 
 async function parseJsonResponse<T>(response: Response): Promise<T> {
@@ -68,8 +69,14 @@ export async function* streamMediaItems(
   limit: number,
   signal: AbortSignal,
   offset = 0,
+  statusFilter: StatusFilter = "all",
 ): AsyncGenerator<MediaItem | MediaStreamDone> {
-  const search = new URLSearchParams({ path, limit: String(limit), offset: String(offset) });
+  const search = new URLSearchParams({
+    path,
+    limit: String(limit),
+    offset: String(offset),
+    statusFilter,
+  });
   const response = await fetch(`/api/media-items/stream?${search.toString()}`, {
     headers: { Accept: "application/x-ndjson" },
     signal,

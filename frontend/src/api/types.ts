@@ -54,6 +54,8 @@ export interface MediaItem {
 
 export type MediaAction = "lock" | "unlock" | "trash" | "untrash" | "seen" | "unseen";
 
+export type StatusFilter = "all" | "unseen" | "seen" | "locked" | "trashed";
+
 export interface MediaActionResponse {
   path: string;
   action: MediaAction;

@@ -32,3 +32,5 @@
 - planned: single-level undo — store last action+item in React state; show an Undo button in the review toolbar for ~5 seconds after any action.
 - planned: remove review path — `DELETE /api/review-paths` endpoint and Remove button in the sidebar path list.
 - planned: quick-jump to next locked item — toolbar button in review mode to skip forward to the next locked item without changing the status filter.
+- planned: prevent double-click action bleed in review mode — rapid clicks on lock/trash/seen buttons should not apply the resulting auto-advance to the wrong item; debounce or disable buttons during in-flight API calls.
+- planned: server-side status filtering in the scan stream — the stream endpoint should accept a `statusFilter` query parameter (`unseen`, `locked`, `trashed`, `seen`, `all`) and apply it on the backend before counting against `limit`/`offset`, so the frontend receives only the items that match the active filter rather than filtering a full page post-load.

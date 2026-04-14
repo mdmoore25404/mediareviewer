@@ -10,11 +10,10 @@ import {
   fetchReviewPaths,
   streamMediaItems,
 } from "./api/client";
-import type { HealthResponse, MediaAction, MediaItem } from "./api/types";
+import type { HealthResponse, MediaAction, MediaItem, StatusFilter } from "./api/types";
 import { FolderBrowser } from "./FolderBrowser";
 
 type ViewMode = "grid" | "list";
-type StatusFilter = "all" | "locked" | "trashed" | "seen" | "unseen";
 type MediaFilter = "all" | "image" | "video";
 
 interface TrashLockedWarning {
@@ -121,7 +120,17 @@ function App(): ReactElement {
     };
   }, []);
 
+  // When statusFilter changes, the current scan results are from the previous filter.
+  // Reset so the user re-scans rather than seeing stale data.
+  useEffect(() => {
+    scanAbortRef.current?.abort();
+    setMediaItems([]);
+    setHasMore(false);
+    setStatusMessage(null);
+  }, [statusFilter]);
+
   const displayedItems = useMemo(() => {
+    // Status filtering is now handled by the backend; only media-type filtering remains here.
     const filteredByMedia = mediaItems.filter((item) => {
       if (mediaFilter === "all") {
         return true;
@@ -129,24 +138,8 @@ function App(): ReactElement {
       return item.mediaType === mediaFilter;
     });
 
-    const filteredByStatus = filteredByMedia.filter((item) => {
-      if (statusFilter === "all") {
-        return true;
-      }
-      if (statusFilter === "locked") {
-        return item.status.locked;
-      }
-      if (statusFilter === "trashed") {
-        return item.status.trashed;
-      }
-      if (statusFilter === "seen") {
-        return item.status.seen;
-      }
-      return !item.status.seen;
-    });
-
-    return sortMediaItems(filteredByStatus, sortOption);
-  }, [mediaFilter, mediaItems, sortOption, statusFilter]);
+    return sortMediaItems(filteredByMedia, sortOption);
+  }, [mediaFilter, mediaItems, sortOption]);
 
   const activeReviewIndex = useMemo(() => {
     if (!activeReviewPath) {
@@ -253,7 +246,7 @@ function App(): ReactElement {
 
     let count = 0;
     try {
-      for await (const event of streamMediaItems(selectedPath, scanLimit, controller.signal)) {
+      for await (const event of streamMediaItems(selectedPath, scanLimit, controller.signal, 0, statusFilter)) {
         if ("type" in event && event.type === "done") {
           setHasMore(event.count >= scanLimit);
           setStatusMessage(`Loaded ${event.count} media items from ${selectedPath}.`);
@@ -282,7 +275,7 @@ function App(): ReactElement {
     try {
       const offset = mediaItems.length;
       let count = 0;
-      for await (const event of streamMediaItems(selectedPath, scanLimit, controller.signal, offset)) {
+      for await (const event of streamMediaItems(selectedPath, scanLimit, controller.signal, offset, statusFilter)) {
         if ("type" in event && event.type === "done") {
           setHasMore(event.count >= scanLimit);
         } else {

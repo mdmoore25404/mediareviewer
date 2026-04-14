@@ -172,14 +172,14 @@ describe("App", () => {
       expect(screen.getByRole("button", { name: "Scan media" })).toBeInTheDocument();
     });
 
+    // Switch to "All" before scanning so the item remains visible after being marked seen
+    await user.selectOptions(screen.getByLabelText("Status"), "all");
+
     await user.click(screen.getByRole("button", { name: "Scan media" }));
 
     await waitFor(() => {
       expect(screen.getByText("frame001.jpg")).toBeInTheDocument();
     });
-
-    // Switch to "All" so the item remains visible after being marked seen
-    await user.selectOptions(screen.getByLabelText("Status"), "all");
 
     const cards = screen.getAllByTestId("media-item");
     const frame001Card = cards.find((card) => within(card).queryByText("frame001.jpg") !== null);
@@ -268,6 +268,25 @@ describe("App", () => {
 
     await waitFor(() => {
       expect(within(reviewDialog).getByRole("heading", { name: "frame002.jpg" })).toBeInTheDocument();
+    });
+  });
+
+  it("includes statusFilter in the stream request URL", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Scan media" })).toBeInTheDocument();
+    });
+
+    await user.selectOptions(screen.getByLabelText("Status"), "locked");
+    await user.click(screen.getByRole("button", { name: "Scan media" }));
+
+    await waitFor(() => {
+      const calls = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls as [string][];
+      const streamCall = calls.find(([url]) => url.startsWith("/api/media-items/stream?"));
+      expect(streamCall).toBeTruthy();
+      expect(streamCall?.[0]).toContain("statusFilter=locked");
     });
   });
 });
