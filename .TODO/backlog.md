@@ -38,7 +38,7 @@
 - planned: prevent double-click action bleed in review mode — debounce or disable buttons during in-flight API calls.
 - planned: generate and maintain Mermaid architecture diagrams in `docs/` via a script or agent skill; re-runnable after structural changes.
 - planned: remove trailcam-specific language from the UI — replace with generic copy for any batch-review workflow.
-- planned: video playback mini-controls in review mode — −5 s / +5 s skip, pause/play toggle, mute toggle; playback-speed selector (1×, 2×, 4×, 8×) persisted in `sessionStorage`; control group disabled for image items.
+- done: video playback mini-controls in review mode — −5 s / +5 s skip, pause/play toggle, mute toggle; playback-speed selector (0.5×, 1×, 1.5×, 2×, 4×) persisted in `sessionStorage`; control group disabled for image items.
 - planned: strip the review-path prefix from file paths shown in the review dialog and grid cards; display only the relative path beneath the root.
 - planned: compact landscape info row — file size and modified timestamp on the same line as the filename in a smaller font to give more vertical space to the media preview.
 - planned: expose `video_preload_mb` as a configurable setting via `GET/PATCH /api/settings` endpoint and a settings panel in the frontend UI; currently only configurable via YAML (`~/.mediareviewer/config.yaml`) or environment variable (`MEDIAREVIEWER_VIDEO_PRELOAD_MB`).

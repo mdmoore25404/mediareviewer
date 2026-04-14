@@ -94,6 +94,18 @@ const mediaActionResponse: MediaActionResponse = {
   },
 };
 
+const videoItem: MediaItem = {
+  path: "/home/michaelmoore/trailcam/DCIM/100MEDIA/clip001.mp4",
+  name: "clip001.mp4",
+  mediaType: "video",
+  thumbnailUrl: "",
+  sizeBytes: 10240,
+  modifiedAt: "2026-04-12T21:50:19+00:00",
+  createdAt: "2026-04-12T21:50:19+00:00",
+  status: { locked: false, trashed: false, seen: false },
+  metadata: { width: null, height: null },
+};
+
 describe("App", () => {
   beforeEach(() => {
     const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
@@ -173,6 +185,7 @@ describe("App", () => {
   afterEach(() => {
     cleanup();
     vi.unstubAllGlobals();
+    vi.restoreAllMocks();
   });
 
   it("loads review paths and scans media items", async () => {
@@ -343,8 +356,7 @@ describe("App", () => {
 
   it("theme toggle cycles through auto → light → dark", async () => {
     const user = userEvent.setup();
-    vi.spyOn(Object.getPrototypeOf(window.localStorage), "getItem").mockReturnValue(null);
-    vi.spyOn(Object.getPrototypeOf(window.localStorage), "setItem").mockImplementation(() => undefined);
+
     render(<App />);
 
     // Default is auto — icon is fa-circle-half-stroke title includes "Auto mode"
@@ -362,5 +374,93 @@ describe("App", () => {
     // Click again → back to auto
     await user.click(screen.getByRole("button", { name: /dark mode/i }));
     expect(screen.getByRole("button", { name: /auto mode/i })).toBeInTheDocument();
+  });
+
+  it("shows video mini-controls when a video item is in review", async () => {
+    const user = userEvent.setup();
+
+    // Override stream to return one video item
+    vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : (input as Request).url;
+      if (url.endsWith("/api/health")) return Promise.resolve({ ok: true, json: () => Promise.resolve(healthResponse) });
+      if (url.endsWith("/api/review-paths") && (!init?.method || init.method === "GET")) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve(reviewPathsResponse) });
+      }
+      if (url.startsWith("/api/media-items/stream?")) {
+        return Promise.resolve({ ok: true, body: makeStreamBody([videoItem]) });
+      }
+      return Promise.resolve({ ok: false, json: () => Promise.resolve({ error: "unhandled" }) });
+    }));
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Scan media" })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole("button", { name: "Scan media" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("clip001.mp4")).toBeInTheDocument();
+    });
+
+    // Open in review mode
+    await user.click(screen.getByText("clip001.mp4"));
+
+    await waitFor(() => {
+      expect(screen.getByRole("group", { name: "Video playback controls" })).toBeInTheDocument();
+    });
+
+    // Speed buttons are present
+    expect(screen.getByRole("button", { name: "1×" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "2×" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "4×" })).toBeInTheDocument();
+
+    // Skip buttons
+    expect(screen.getByRole("button", { name: "Skip back 5 seconds" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Skip forward 5 seconds" })).toBeInTheDocument();
+
+    // Mute toggle
+    expect(screen.getByRole("button", { name: "Mute" })).toBeInTheDocument();
+  });
+
+  it("speed buttons cycle playback rate and persist to sessionStorage", async () => {
+    const user = userEvent.setup();
+
+    vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : (input as Request).url;
+      if (url.endsWith("/api/health")) return Promise.resolve({ ok: true, json: () => Promise.resolve(healthResponse) });
+      if (url.endsWith("/api/review-paths") && (!init?.method || init.method === "GET")) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve(reviewPathsResponse) });
+      }
+      if (url.startsWith("/api/media-items/stream?")) {
+        return Promise.resolve({ ok: true, body: makeStreamBody([videoItem]) });
+      }
+      return Promise.resolve({ ok: false, json: () => Promise.resolve({ error: "unhandled" }) });
+    }));
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Scan media" })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole("button", { name: "Scan media" }));
+    await waitFor(() => { expect(screen.getByText("clip001.mp4")).toBeInTheDocument(); });
+    await user.click(screen.getByText("clip001.mp4"));
+
+    await waitFor(() => {
+      expect(screen.getByRole("group", { name: "Video playback controls" })).toBeInTheDocument();
+    });
+
+    // 1× is active by default (aria-pressed)
+    expect(screen.getByRole("button", { name: "1×" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "2×" })).toHaveAttribute("aria-pressed", "false");
+
+    // Click 2×
+    await user.click(screen.getByRole("button", { name: "2×" }));
+    expect(screen.getByRole("button", { name: "2×" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "1×" })).toHaveAttribute("aria-pressed", "false");
+    expect(sessionStorage.getItem("mediareviewer-playback-rate")).toBe("2");
   });
 });

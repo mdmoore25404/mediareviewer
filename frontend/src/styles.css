@@ -308,8 +308,8 @@ body {
   width: min(1200px, 100%);
   max-height: 100%;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
-  gap: 1rem;
+  grid-template-rows: auto minmax(0, 1fr) auto auto;
+  gap: 0.5rem 1rem;
   color: #f4f6f8;
 }
 
@@ -375,10 +375,37 @@ body {
 
 .review-media {
   width: 100%;
-  max-height: 70vh;
+  max-height: 62vh;
   object-fit: contain;
   display: block;
   cursor: pointer; /* tap-to-play indicator for video */
+}
+
+.video-mini-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  padding: 0.4rem 0;
+}
+
+.video-mini-btn {
+  min-width: 2.25rem;
+  padding-inline: 0.6rem;
+}
+
+.video-mini-label {
+  margin-left: 0.25em;
+  font-size: 0.78em;
+}
+
+.video-mini-speed {
+  display: flex;
+  gap: 0.25rem;
+  margin-left: 0.5rem;
+  border-left: 1px solid rgba(255, 255, 255, 0.2);
+  padding-left: 0.5rem;
 }
 
 .review-path {

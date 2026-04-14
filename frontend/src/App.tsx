@@ -103,6 +103,14 @@ function App(): ReactElement {
   const [fetchMoreFailed, setFetchMoreFailed] = useState<boolean>(false);
   const scanAbortRef = useRef<AbortController | null>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const [playbackRate, setPlaybackRate] = useState<number>(() => {
+    const stored = sessionStorage.getItem("mediareviewer-playback-rate");
+    const parsed = stored !== null ? Number(stored) : NaN;
+    return [0.5, 1, 1.5, 2, 4].includes(parsed) ? parsed : 1;
+  });
+  const [isVideoPaused, setIsVideoPaused] = useState<boolean>(false);
+  const [isVideoMuted, setIsVideoMuted] = useState<boolean>(false);
   const [isSubmittingPath, setIsSubmittingPath] = useState<boolean>(false);
   const [isRemovingPath, setIsRemovingPath] = useState<boolean>(false);
   const [isEmptyingTrash, setIsEmptyingTrash] = useState<boolean>(false);
@@ -194,6 +202,18 @@ function App(): ReactElement {
       setActiveReviewPath(null);
     }
   }, [activeReviewIndex, activeReviewPath]);
+
+  // Keep video element in sync with controlled playback rate.
+  useEffect(() => {
+    if (videoRef.current) {
+      videoRef.current.playbackRate = playbackRate;
+    }
+  }, [playbackRate, activeReviewPath]);
+
+  // Reset pause indicator when navigating to a new item (autoPlay starts fresh).
+  useEffect(() => {
+    setIsVideoPaused(false);
+  }, [activeReviewPath]);
 
   useEffect(() => {
     if (!activeReviewItem) {
@@ -1058,12 +1078,16 @@ function App(): ReactElement {
                     />
                   ) : (
                     <video
+                      ref={videoRef}
                       className="review-media"
                       src={buildMediaFileUrl(activeReviewItem.path)}
                       autoPlay
                       playsInline
                       preload="auto"
+                      muted={isVideoMuted}
                       controls={showVideoControls}
+                      onPlay={() => { setIsVideoPaused(false); }}
+                      onPause={() => { setIsVideoPaused(true); }}
                       onClick={(event) => {
                         if (showVideoControls) {
                           return;
@@ -1078,6 +1102,85 @@ function App(): ReactElement {
                   )}
                 </div>
               </div>
+
+              {/* Video mini-controls */}
+              {activeReviewItem.mediaType === "video" && (
+                <div className="video-mini-controls" role="group" aria-label="Video playback controls">
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-outline-light video-mini-btn"
+                    title="Skip back 5 seconds"
+                    aria-label="Skip back 5 seconds"
+                    onClick={() => {
+                      if (videoRef.current) videoRef.current.currentTime -= 5;
+                    }}
+                  >
+                    <i className="fa-solid fa-backward-step" aria-hidden="true" />
+                    <span className="video-mini-label">−5s</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-outline-light video-mini-btn video-mini-playpause"
+                    title={isVideoPaused ? "Play" : "Pause"}
+                    aria-label={isVideoPaused ? "Play" : "Pause"}
+                    onClick={() => {
+                      const vid = videoRef.current;
+                      if (!vid) return;
+                      if (vid.paused) void vid.play();
+                      else vid.pause();
+                    }}
+                  >
+                    <i
+                      className={`fa-solid ${isVideoPaused ? "fa-play" : "fa-pause"}`}
+                      aria-hidden="true"
+                    />
+                  </button>
+
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-outline-light video-mini-btn"
+                    title="Skip forward 5 seconds"
+                    aria-label="Skip forward 5 seconds"
+                    onClick={() => {
+                      if (videoRef.current) videoRef.current.currentTime += 5;
+                    }}
+                  >
+                    <i className="fa-solid fa-forward-step" aria-hidden="true" />
+                    <span className="video-mini-label">+5s</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    className={`btn btn-sm video-mini-btn ${isVideoMuted ? "btn-secondary" : "btn-outline-light"}`}
+                    title={isVideoMuted ? "Unmute" : "Mute"}
+                    aria-label={isVideoMuted ? "Unmute" : "Mute"}
+                    onClick={() => { setIsVideoMuted((prev) => !prev); }}
+                  >
+                    <i
+                      className={`fa-solid ${isVideoMuted ? "fa-volume-xmark" : "fa-volume-high"}`}
+                      aria-hidden="true"
+                    />
+                  </button>
+
+                  <div className="video-mini-speed">
+                    {([0.5, 1, 1.5, 2, 4] as const).map((rate) => (
+                      <button
+                        key={rate}
+                        type="button"
+                        className={`btn btn-sm video-mini-btn ${playbackRate === rate ? "btn-light" : "btn-outline-light"}`}
+                        aria-pressed={playbackRate === rate}
+                        onClick={() => {
+                          sessionStorage.setItem("mediareviewer-playback-rate", String(rate));
+                          setPlaybackRate(rate);
+                        }}
+                      >
+                        {rate}×
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Pre-fetch next item to eliminate navigation flicker */}
               {nextReviewItem && (
