@@ -100,7 +100,9 @@ function App(): ReactElement {
   const [touchStartX, setTouchStartX] = useState<number | null>(null);
   const [touchStartY, setTouchStartY] = useState<number | null>(null);
   const [isFolderBrowserOpen, setIsFolderBrowserOpen] = useState<boolean>(false);
-  const [showVideoControls, setShowVideoControls] = useState<boolean>(false);
+  const [showVideoControls, setShowVideoControls] = useState<boolean>(
+    () => window.matchMedia("(pointer: fine) and (hover: hover)").matches,
+  );
   const [showHelp, setShowHelp] = useState<boolean>(false);
   const [trashLockedWarning, setTrashLockedWarning] = useState<TrashLockedWarning | null>(null);
 
@@ -181,6 +183,10 @@ function App(): ReactElement {
           setShowHelp(false);
           return;
         }
+        if (trashLockedWarning) {
+          setTrashLockedWarning(null);
+          return;
+        }
         setActiveReviewPath(null);
         return;
       }
@@ -239,7 +245,7 @@ function App(): ReactElement {
       window.removeEventListener("keydown", handleKeyDown);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps -- showNextReviewItem captures displayedItems/activeReviewIndex which are already deps
-  }, [activeReviewIndex, activeReviewItem, displayedItems, showHelp]);
+  }, [activeReviewIndex, activeReviewItem, displayedItems, showHelp, trashLockedWarning]);
 
   const handleScan = async (): Promise<void> => {
     if (!selectedPath) {

@@ -14,3 +14,20 @@ Object.defineProperty(globalThis, "IntersectionObserver", {
   configurable: true,
   value: IntersectionObserverStub,
 });
+
+// window.matchMedia is not implemented in jsdom; stub it as a non-desktop (touch) device.
+Object.defineProperty(globalThis, "matchMedia", {
+  writable: true,
+  configurable: true,
+  value: (query: string): MediaQueryList =>
+    ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addListener: (): void => { /* stub */ },
+      removeListener: (): void => { /* stub */ },
+      addEventListener: (): void => { /* stub */ },
+      removeEventListener: (): void => { /* stub */ },
+      dispatchEvent: (): boolean => false,
+    }) as MediaQueryList,
+});
