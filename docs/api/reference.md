@@ -277,26 +277,43 @@ Applies a companion-file state action to a media file under a known review path.
 
 Permanently deletes all media files (and their companion files) that are marked as trashed across all configured known review paths.  Locked-and-trashed items are **skipped** to protect them from accidental deletion.  After deleting trashed files, orphaned thumbnails (whose source media was removed outside this application) are also pruned from each review path's thumbnail cache.
 
+The response is a streaming NDJSON body (`application/x-ndjson`).  Each line is a JSON object with a `type` field.  The caller should read the stream line by line until the `done` event is received or the connection is closed.
+
 ### Request
 
 No request body required.
 
-### Success Response
+### Response Content-Type
 
-```json
-{
-  "deleted": 2,
-  "paths": [
-    "/home/michaelmoore/trailcam/DCIM/100MEDIA/clip001.mp4",
-    "/home/michaelmoore/trailcam/DCIM/100MEDIA/clip002.mp4"
-  ],
-  "errors": []
-}
+`application/x-ndjson` — one JSON object per line, newline-terminated.
+
+### Event Schema
+
+| `type` | Fields | Description |
+|---|---|---|
+| `deleting` | `path` | File is about to be deleted. |
+| `deleted` | `path` | File was successfully deleted. |
+| `skipped` | `path`, `reason` | File was not deleted (`reason`: `"locked"`). |
+| `error` | `path`, `message` | File could not be deleted (OS error). |
+| `done` | `deleted`, `errors` | Stream complete; summary counts. |
+
+### Example Stream
+
 ```
+{"type": "deleting", "path": "/home/michaelmoore/trailcam/DCIM/100MEDIA/clip001.mp4"}
+{"type": "deleted", "path": "/home/michaelmoore/trailcam/DCIM/100MEDIA/clip001.mp4"}
+{"type": "deleting", "path": "/home/michaelmoore/trailcam/DCIM/100MEDIA/clip002.mp4"}
+{"type": "skipped", "path": "/home/michaelmoore/trailcam/DCIM/100MEDIA/clip002.mp4", "reason": "locked"}
+{"type": "done", "deleted": 1, "errors": 0}
+```
+
+### Client Abort
+
+The client may abort the request at any time (e.g. via `AbortController.abort()`).  The server will stop streaming when it detects the closed connection.
 
 ### Errors
 
-- `200` with non-empty `errors` array: one or more files could not be removed (permissions, concurrent modification, etc.). Successfully-deleted items are still returned in `paths`.
+- `error` events within the stream: an individual file could not be removed (permissions, concurrent modification).  The stream continues for remaining files.
 
 ## GET /api/media-file
 

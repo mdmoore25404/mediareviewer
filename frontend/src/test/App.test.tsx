@@ -135,6 +135,21 @@ describe("App", () => {
         });
       }
 
+      if (url.endsWith("/api/empty-trash") && init?.method === "POST") {
+        const encoder = new TextEncoder();
+        const ndjson =
+          JSON.stringify({ type: "done", deleted: 0, errors: 0 }) + "\n";
+        return Promise.resolve({
+          ok: true,
+          body: new ReadableStream({
+            start(controller) {
+              controller.enqueue(encoder.encode(ndjson));
+              controller.close();
+            },
+          }),
+        });
+      }
+
       if (url.endsWith("/api/media-actions")) {
         return Promise.resolve({
           ok: true,

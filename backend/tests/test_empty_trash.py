@@ -1,5 +1,6 @@
-"""Tests for the POST /api/empty-trash endpoint."""
+"""Tests for the POST /api/empty-trash NDJSON streaming endpoint."""
 
+import json
 from pathlib import Path
 
 from flask.testing import FlaskClient
@@ -23,6 +24,18 @@ def _make_client(tmp_path: Path, review_directory: Path) -> FlaskClient:
     return create_app(settings).test_client()
 
 
+def _parse_ndjson(response: object) -> list[dict[str, object]]:
+    """Parse the NDJSON body of an empty-trash response into a list of events."""
+    from flask.testing import FlaskClient  # noqa: F401 — only used via response type
+
+    data = getattr(response, "data", b"")
+    return [
+        json.loads(line)
+        for line in data.decode("utf-8").strip().splitlines()
+        if line.strip()
+    ]
+
+
 def test_empty_trash_deletes_trashed_files(tmp_path: Path) -> None:
     """Files with a .trash companion should be permanently deleted."""
 
@@ -41,10 +54,13 @@ def test_empty_trash_deletes_trashed_files(tmp_path: Path) -> None:
     response = client.post("/api/empty-trash")
 
     assert response.status_code == 200
-    payload = response.get_json()
-    assert payload["deleted"] == 1
-    assert str(trash_file.resolve()) in payload["paths"]
-    assert payload["errors"] == []
+    events = _parse_ndjson(response)
+    done = next(e for e in events if e["type"] == "done")
+    deleted_events = [e for e in events if e["type"] == "deleted"]
+
+    assert done["deleted"] == 1
+    assert done["errors"] == 0
+    assert any(e["path"] == str(trash_file.resolve()) for e in deleted_events)
 
     assert keep_file.exists()
     assert not trash_file.exists()
@@ -67,14 +83,18 @@ def test_empty_trash_skips_locked_files(tmp_path: Path) -> None:
     response = client.post("/api/empty-trash")
 
     assert response.status_code == 200
-    payload = response.get_json()
-    assert payload["deleted"] == 0
+    events = _parse_ndjson(response)
+    done = next(e for e in events if e["type"] == "done")
+    skipped_events = [e for e in events if e["type"] == "skipped"]
+
+    assert done["deleted"] == 0
+    assert any(e["path"] == str(media_file.resolve()) for e in skipped_events)
     assert media_file.exists()
     assert media_file.with_suffix(".mp4.trash").exists()
 
 
 def test_empty_trash_returns_zero_when_nothing_trashed(tmp_path: Path) -> None:
-    """Empty-trash on a clean folder should return deleted=0 without error."""
+    """Empty-trash on a clean folder should emit done with deleted=0."""
 
     review_directory = tmp_path / "review"
     review_directory.mkdir(parents=True)
@@ -84,6 +104,8 @@ def test_empty_trash_returns_zero_when_nothing_trashed(tmp_path: Path) -> None:
     response = client.post("/api/empty-trash")
 
     assert response.status_code == 200
-    payload = response.get_json()
-    assert payload["deleted"] == 0
-    assert payload["errors"] == []
+    events = _parse_ndjson(response)
+    done = next(e for e in events if e["type"] == "done")
+
+    assert done["deleted"] == 0
+    assert done["errors"] == 0

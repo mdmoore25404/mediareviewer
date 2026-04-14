@@ -1,6 +1,5 @@
 import type {
   AddReviewPathResponse,
-  EmptyTrashResponse,
   FolderFilesResponse,
   FoldersResponse,
   HealthResponse,
@@ -11,6 +10,7 @@ import type {
   RemoveReviewPathResponse,
   ReviewPathsResponse,
   StatusFilter,
+  TrashProgressEvent,
 } from "./types";
 
 async function parseJsonResponse<T>(response: Response): Promise<T> {
@@ -148,13 +148,40 @@ export function buildMediaThumbnailUrl(path: string, size: number): string {
   return `/api/media-thumbnail?${search.toString()}`;
 }
 
-/** Permanently delete all trashed media items across all known review paths. */
-export async function emptyTrash(): Promise<EmptyTrashResponse> {
+/** Stream NDJSON progress events from the empty-trash endpoint. */
+export async function* streamEmptyTrash(
+  signal: AbortSignal,
+): AsyncGenerator<TrashProgressEvent> {
   const response = await fetch("/api/empty-trash", {
     method: "POST",
-    headers: { Accept: "application/json" },
+    headers: { Accept: "application/x-ndjson" },
+    signal,
   });
-  return parseJsonResponse<EmptyTrashResponse>(response);
+  if (!response.ok || !response.body) {
+    const errorPayload = (await response.json().catch(() => null)) as { error?: string } | null;
+    const details = errorPayload?.error ?? `Empty trash failed with status ${response.status}.`;
+    throw new Error(details);
+  }
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() ?? "";
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (trimmed) {
+        yield JSON.parse(trimmed) as TrashProgressEvent;
+      }
+    }
+  }
+  const remaining = buffer.trim();
+  if (remaining) {
+    yield JSON.parse(remaining) as TrashProgressEvent;
+  }
 }
 
 /** Fetch immediate child folders under a parent directory. */

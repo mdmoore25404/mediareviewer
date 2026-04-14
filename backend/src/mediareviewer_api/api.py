@@ -447,13 +447,19 @@ def post_media_action() -> Response:
 
 @api_blueprint.post("/empty-trash")
 def post_empty_trash() -> Response:
-    """Permanently delete all media files (and their companions) marked as trashed.
+    """Stream NDJSON progress events while permanently deleting all trashed media files.
 
-    Iterates over every configured known review path, finds files with a ``.trash``
-    companion, removes the media file and all its companion files, and purges the
-    cached thumbnail.  Locked items are skipped even if they are also trashed.
+    Yields one JSON object per line (``application/x-ndjson``):
 
-    Returns a ``deleted`` count and a list of paths that could not be removed.
+    * ``{"type": "deleting", "path": "..."}`` — about to process a candidate file.
+    * ``{"type": "deleted",  "path": "..."}`` — file and companions removed.
+    * ``{"type": "skipped",  "path": "...", "reason": "locked"}`` — skipped because locked.
+    * ``{"type": "error",    "path": "...", "message": "..."}`` — deletion failed.
+    * ``{"type": "done",   "deleted": N, "errors": N}`` — final summary line.
+
+    Locked-and-trashed items are skipped.  After each review path is processed,
+    orphaned thumbnails are pruned.  Disconnecting the client mid-stream stops
+    the generator gracefully.
     """
 
     config_store = cast(
@@ -466,38 +472,56 @@ def post_empty_trash() -> Response:
     )
 
     config = config_store.load()
-    deleted: list[str] = []
-    errors: list[str] = []
+    known_paths = config.known_paths
 
-    for review_path in config.known_paths:
-        if not review_path.is_dir():
-            continue
-        for candidate in sorted(review_path.rglob("*")):
-            if not candidate.is_file():
-                continue
-            trash_marker = candidate.with_suffix(f"{candidate.suffix}.trash")
-            if not trash_marker.exists():
-                continue
-            lock_marker = candidate.with_suffix(f"{candidate.suffix}.lock")
-            if lock_marker.exists():
-                # Locked items are never deleted automatically
-                continue
-            # Remove the media file, all companion files, and the thumbnail
-            try:
-                for companion_suffix in (".lock", ".trash", ".seen"):
-                    companion = candidate.with_suffix(f"{candidate.suffix}{companion_suffix}")
-                    if companion.exists():
-                        companion.unlink()
-                thumbnail_cache.delete_thumbnail(candidate, review_path)
-                candidate.unlink()
-                deleted.append(str(candidate))
-            except OSError as exc:
-                errors.append(f"{candidate}: {exc.strerror}")
-        # Remove orphaned thumbnails whose source files were deleted outside
-        # of this application (e.g. manual SD card management).
-        thumbnail_cache.prune_orphaned_thumbnails(review_path)
+    def _generate() -> object:
+        deleted_count = 0
+        error_count = 0
+        try:
+            for review_path in known_paths:
+                if not review_path.is_dir():
+                    continue
+                for candidate in sorted(review_path.rglob("*")):
+                    if not candidate.is_file():
+                        continue
+                    trash_marker = candidate.with_suffix(
+                        f"{candidate.suffix}.trash"
+                    )
+                    if not trash_marker.exists():
+                        continue
+                    lock_marker = candidate.with_suffix(
+                        f"{candidate.suffix}.lock"
+                    )
+                    if lock_marker.exists():
+                        yield json.dumps(
+                            {"type": "skipped", "path": str(candidate), "reason": "locked"}
+                        ) + "\n"
+                        continue
+                    yield json.dumps({"type": "deleting", "path": str(candidate)}) + "\n"
+                    try:
+                        for companion_suffix in (".lock", ".trash", ".seen"):
+                            companion = candidate.with_suffix(
+                                f"{candidate.suffix}{companion_suffix}"
+                            )
+                            if companion.exists():
+                                companion.unlink()
+                        thumbnail_cache.delete_thumbnail(candidate, review_path)
+                        candidate.unlink()
+                        deleted_count += 1
+                        yield json.dumps({"type": "deleted", "path": str(candidate)}) + "\n"
+                    except OSError as exc:
+                        error_count += 1
+                        yield json.dumps(
+                            {"type": "error", "path": str(candidate), "message": exc.strerror}
+                        ) + "\n"
+                thumbnail_cache.prune_orphaned_thumbnails(review_path)
+        except GeneratorExit:
+            pass
+        finally:
+            summary = {"type": "done", "deleted": deleted_count, "errors": error_count}
+            yield json.dumps(summary) + "\n"
 
-    return jsonify({"deleted": len(deleted), "paths": deleted, "errors": errors})
+    return Response(stream_with_context(_generate()), mimetype="application/x-ndjson")
 
 
 def _build_media_thumbnail_url(media_path: str, size: int) -> str:

@@ -5,13 +5,20 @@ import {
   applyMediaAction,
   buildMediaFileUrl,
   buildMediaThumbnailUrl,
-  emptyTrash,
   fetchHealth,
   fetchReviewPaths,
   removeReviewPath,
+  streamEmptyTrash,
   streamMediaItems,
 } from "./api/client";
-import type { HealthResponse, MediaAction, MediaItem, StatusFilter } from "./api/types";
+import type {
+  HealthResponse,
+  MediaAction,
+  MediaItem,
+  StatusFilter,
+  TrashProgressEvent,
+} from "./api/types";
+import { TrashProgressDialog } from "./TrashProgressDialog";
 import { FolderBrowser } from "./FolderBrowser";
 
 type ViewMode = "grid" | "list";
@@ -84,6 +91,9 @@ function App(): ReactElement {
   const [isSubmittingPath, setIsSubmittingPath] = useState<boolean>(false);
   const [isRemovingPath, setIsRemovingPath] = useState<boolean>(false);
   const [isEmptyingTrash, setIsEmptyingTrash] = useState<boolean>(false);
+  const [trashProgressOpen, setTrashProgressOpen] = useState<boolean>(false);
+  const [trashEvents, setTrashEvents] = useState<TrashProgressEvent[]>([]);
+  const trashAbortRef = useRef<AbortController | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [activeReviewPath, setActiveReviewPath] = useState<string | null>(null);
@@ -382,24 +392,34 @@ function App(): ReactElement {
   };
 
   const handleEmptyTrash = async (): Promise<void> => {
+    const controller = new AbortController();
+    trashAbortRef.current = controller;
+    setTrashEvents([]);
+    setTrashProgressOpen(true);
     setIsEmptyingTrash(true);
     setStatusMessage(null);
     setErrorMessage(null);
+    const deletedPaths: string[] = [];
     try {
-      const payload = await emptyTrash();
-      // Remove permanently deleted items from local state
-      const deletedSet = new Set(payload.paths);
-      setMediaItems((prev) => prev.filter((item) => !deletedSet.has(item.path)));
-      const msg = payload.deleted === 1
-        ? "Permanently deleted 1 trashed item."
-        : `Permanently deleted ${payload.deleted} trashed items.`;
-      setStatusMessage(msg);
-      if (payload.errors.length > 0) {
-        setErrorMessage(`Some items could not be deleted: ${payload.errors.join("; ")}`);
+      for await (const event of streamEmptyTrash(controller.signal)) {
+        setTrashEvents((prev) => [...prev, event]);
+        if (event.type === "deleted" && event.path) {
+          deletedPaths.push(event.path);
+        }
+        if (event.type === "done") {
+          const deletedSet = new Set(deletedPaths);
+          setMediaItems((prev) => prev.filter((item) => !deletedSet.has(item.path)));
+          const n = event.deleted ?? deletedPaths.length;
+          const msg = n === 1
+            ? "Permanently deleted 1 trashed item."
+            : `Permanently deleted ${n} trashed items.`;
+          setStatusMessage(msg);
+        }
       }
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : "Unable to empty trash.";
-      setErrorMessage(message);
+      if (error instanceof Error && error.name !== "AbortError") {
+        setErrorMessage(error.message);
+      }
     } finally {
       setIsEmptyingTrash(false);
     }
@@ -716,6 +736,18 @@ function App(): ReactElement {
                     <i className="fa-solid fa-trash me-2" aria-hidden="true" />
                     {isEmptyingTrash ? "Emptying..." : "Empty trash"}
                   </button>
+                  {(isEmptyingTrash || trashEvents.length > 0) && (
+                    <button
+                      type="button"
+                      className="btn btn-outline-secondary btn-sm"
+                      onClick={() => {
+                        setTrashProgressOpen(true);
+                      }}
+                    >
+                      <i className="fa-solid fa-list me-1" aria-hidden="true" />
+                      Progress
+                    </button>
+                  )}
                 </div>
 
                 {statusMessage && (
@@ -1044,6 +1076,17 @@ function App(): ReactElement {
             </div>
           </div>
         )}
+        <TrashProgressDialog
+          isOpen={trashProgressOpen}
+          isRunning={isEmptyingTrash}
+          events={trashEvents}
+          onClose={() => {
+            setTrashProgressOpen(false);
+          }}
+          onAbort={() => {
+            trashAbortRef.current?.abort();
+          }}
+        />
         {trashLockedWarning && (
           <div
             className="review-overlay"
