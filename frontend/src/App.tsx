@@ -191,7 +191,7 @@ function App(): ReactElement {
         return;
       }
       if (event.key === "ArrowRight") {
-        setActiveReviewPath(displayedItems[(activeReviewIndex + 1) % displayedItems.length]?.path ?? null);
+        showNextReviewItem();
         return;
       }
       if (event.key === "ArrowLeft") {
@@ -471,7 +471,14 @@ function App(): ReactElement {
     if (itemsFromEnd <= 2 && hasMore && !isFetchingMore) {
       void handleLoadMore();
     }
-    setActiveReviewPath(displayedItems[(activeReviewIndex + 1) % displayedItems.length]?.path ?? null);
+    const nextIndex = activeReviewIndex + 1;
+    if (nextIndex >= displayedItems.length) {
+      // Don't wrap to the start when more items are loading or still to come
+      if (hasMore) return;
+      setActiveReviewPath(displayedItems[0]?.path ?? null);
+      return;
+    }
+    setActiveReviewPath(displayedItems[nextIndex]?.path ?? null);
   };
 
   const handleReviewTouchStart = (touchX: number, touchY: number): void => {
