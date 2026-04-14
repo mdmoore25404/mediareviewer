@@ -70,6 +70,12 @@ function formatSize(sizeBytes: number): string {
   return `${(mib / 1024).toFixed(1)} GiB`;
 }
 
+function relPath(fullPath: string, basePath: string): string {
+  if (!basePath) return fullPath;
+  const prefix = basePath.endsWith("/") ? basePath : `${basePath}/`;
+  return fullPath.startsWith(prefix) ? fullPath.slice(prefix.length) : fullPath;
+}
+
 function themeIcon(mode: ThemeMode): string {
   if (mode === "light") return "fa-sun theme-icon--light";
   if (mode === "dark") return "fa-moon theme-icon--dark";
@@ -859,11 +865,13 @@ function App(): ReactElement {
                           />
                           <span>{item.mediaType}</span>
                         </div>
-                        <h3 className="h6 mb-1 text-break">{item.name}</h3>
-                        <p className="small text-secondary mb-2 text-break">{item.path}</p>
-                        <p className="small mb-2">
-                          {formatSize(item.sizeBytes)} | modified {new Date(item.modifiedAt).toLocaleString()}
-                        </p>
+                        <h3 className="h6 mb-1 text-break">
+                          {item.name}
+                          <span className="review-footer-meta ms-2" aria-hidden="true">
+                            {formatSize(item.sizeBytes)} · {new Date(item.modifiedAt).toLocaleString()}
+                          </span>
+                        </h3>
+                        <p className="small text-secondary mb-2 text-break">{relPath(item.path, selectedPath)}</p>
                         <div className="d-flex flex-wrap gap-2 mb-2">
                           {item.status.locked && <span className="badge text-bg-primary">locked</span>}
                           {item.status.trashed && <span className="badge text-bg-danger">trash</span>}
@@ -1195,10 +1203,14 @@ function App(): ReactElement {
 
               <div className="review-footer">
                 <div>
-                  <h2 className="h5 mb-1">{activeReviewItem.name}</h2>
-                  <p className="review-path mb-1" title={activeReviewItem.path}>{activeReviewItem.path}</p>
-                  <p className="review-footer-date mb-0 text-secondary">
-                    {formatSize(activeReviewItem.sizeBytes)} | modified {new Date(activeReviewItem.modifiedAt).toLocaleString()}
+                  <h2 className="h5 mb-1">
+                    {activeReviewItem.name}
+                    <span className="review-footer-meta ms-2" aria-hidden="true">
+                      {formatSize(activeReviewItem.sizeBytes)} · {new Date(activeReviewItem.modifiedAt).toLocaleString()}
+                    </span>
+                  </h2>
+                  <p className="review-path mb-0" title={activeReviewItem.path}>
+                    {relPath(activeReviewItem.path, selectedPath)}
                   </p>
                 </div>
                 <div className="d-flex flex-wrap gap-2">

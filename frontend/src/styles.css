@@ -417,6 +417,12 @@ body {
   opacity: 0.75;
 }
 
+.review-footer-meta {
+  font-size: 0.78rem;
+  font-weight: 400;
+  opacity: 0.65;
+}
+
 .review-help-panel {
   background: rgba(255, 255, 255, 0.08);
   border: 1px solid rgba(255, 255, 255, 0.15);
@@ -520,7 +526,7 @@ body {
   }
 
   .review-path,
-  .review-footer-date {
+  .review-footer-meta {
     display: none;
   }
 
