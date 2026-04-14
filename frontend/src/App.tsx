@@ -911,7 +911,7 @@ function App(): ReactElement {
                   {displayedItems.length === 0 && (
                     <div className="metric-card">
                       <p className="mb-0">
-                        No media items to display. Add or select a path, then scan your trailcam root.
+                        No media items to display. Add or select a path, then scan your media root.
                       </p>
                     </div>
                   )}
