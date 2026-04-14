@@ -63,6 +63,15 @@ function eventLabel(event: TrashProgressEvent): ReactElement {
       </span>
     );
   }
+  if (event.type === "folder_done") {
+    const shortPath = event.path ? event.path.split("/").slice(-3).join("/") : "";
+    return (
+      <span className="text-secondary fst-italic">
+        <i className="fa-solid fa-folder-check me-2" aria-hidden="true" />
+        {shortPath}
+      </span>
+    );
+  }
   return <span>{event.type}</span>;
 }
 
@@ -87,6 +96,17 @@ export function TrashProgressDialog({
   const deletedCount = events.filter((e) => e.type === "deleted").length;
   const errorCount = events.filter((e) => e.type === "error").length;
   const doneEvent = events.find((e) => e.type === "done");
+
+  // Paths that have a resolved outcome — suppress their "deleting" spinner entry.
+  const resolvedPaths = new Set(
+    events
+      .filter((e) => e.type === "deleted" || e.type === "error" || e.type === "skipped")
+      .map((e) => e.path)
+      .filter((p): p is string => p !== undefined),
+  );
+  const logEvents = events.filter(
+    (e) => e.type !== "done" && !(e.type === "deleting" && resolvedPaths.has(e.path ?? "")),
+  );
 
   return (
     <div
@@ -143,13 +163,14 @@ export function TrashProgressDialog({
               {events.length === 0 && isRunning && (
                 <span className="text-secondary">Scanning for trashed files…</span>
               )}
-              {events
-                .filter((e) => e.type !== "done")
-                .map((event, index) => (
-                  <div key={index} className="mb-1">
-                    {eventLabel(event)}
-                  </div>
-                ))}
+              {logEvents.map((event, index) => (
+                <div
+                  key={index}
+                  className={event.type === "folder_done" ? "my-1 border-bottom pb-1" : "mb-1"}
+                >
+                  {eventLabel(event)}
+                </div>
+              ))}
               {doneEvent && (
                 <div className="mt-2 pt-2 border-top">{eventLabel(doneEvent)}</div>
               )}

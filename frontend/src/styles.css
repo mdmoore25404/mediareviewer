@@ -254,6 +254,19 @@ body {
   font-style: italic;
 }
 
+.review-counter-retry {
+  font-size: 0.72rem;
+  font-weight: 400;
+  color: #f8d7da;
+  text-decoration: none;
+  vertical-align: baseline;
+}
+
+.review-counter-retry:hover {
+  color: #fff;
+  text-decoration: underline;
+}
+
 .review-media-shell {
   min-height: 0;
   border-radius: 1rem;

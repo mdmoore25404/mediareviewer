@@ -74,7 +74,7 @@ export interface EmptyTrashResponse {
   errors: string[];
 }
 
-export type TrashEventType = "deleting" | "deleted" | "skipped" | "error" | "done";
+export type TrashEventType = "deleting" | "deleted" | "skipped" | "error" | "done" | "folder_done";
 
 export interface TrashProgressEvent {
   type: TrashEventType;

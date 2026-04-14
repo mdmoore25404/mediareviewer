@@ -1,5 +1,6 @@
 """HTTP routes exposed by the Media Reviewer API."""
 
+import concurrent.futures
 import json
 import os
 import threading
@@ -445,18 +446,42 @@ def post_media_action() -> Response:
     return jsonify(payload)
 
 
+def _delete_trashed_file(
+    candidate: Path,
+    review_path: Path,
+    thumbnail_cache: ThumbnailCacheService,
+) -> dict[str, object]:
+    """Delete *candidate* and its companion files; return a result event dict.
+
+    Designed to run safely in a worker thread: no Flask context access, only
+    filesystem and the thumbnail-cache service (which is also filesystem-only).
+    """
+    try:
+        for companion_suffix in (".lock", ".trash", ".seen"):
+            companion = candidate.with_suffix(f"{candidate.suffix}{companion_suffix}")
+            if companion.exists():
+                companion.unlink()
+        thumbnail_cache.delete_thumbnail(candidate, review_path)
+        candidate.unlink()
+        return {"type": "deleted", "path": str(candidate)}
+    except OSError as exc:
+        return {"type": "error", "path": str(candidate), "message": exc.strerror}
+
+
 @api_blueprint.post("/empty-trash")
 def post_empty_trash() -> Response:
     """Stream NDJSON progress events while permanently deleting all trashed media files.
 
     Yields one JSON object per line (``application/x-ndjson``):
 
-    * ``{"type": "deleting", "path": "..."}`` — about to process a candidate file.
-    * ``{"type": "deleted",  "path": "..."}`` — file and companions removed.
-    * ``{"type": "skipped",  "path": "...", "reason": "locked"}`` — skipped because locked.
-    * ``{"type": "error",    "path": "...", "message": "..."}`` — deletion failed.
-    * ``{"type": "done",   "deleted": N, "errors": N}`` — final summary line.
+    * ``{"type": "deleting",    "path": "..."}`` — file queued for deletion.
+    * ``{"type": "deleted",     "path": "..."}`` — file and companions removed.
+    * ``{"type": "skipped",     "path": "...", "reason": "locked"}`` — skipped locked item.
+    * ``{"type": "error",       "path": "...", "message": "..."}`` — deletion failed.
+    * ``{"type": "folder_done", "path": "..."}`` — all files for one review path processed.
+    * ``{"type": "done",        "deleted": N, "errors": N}`` — final summary line.
 
+    Deletion within each review path runs in parallel using ``deletion_workers`` threads.
     Locked-and-trashed items are skipped.  After each review path is processed,
     orphaned thumbnails are pruned.  Disconnecting the client mid-stream stops
     the generator gracefully.
@@ -470,9 +495,11 @@ def post_empty_trash() -> Response:
         ThumbnailCacheService,
         current_app.extensions["mediareviewer.thumbnail_cache"],
     )
+    settings = cast(AppSettings, current_app.config["MEDIAREVIEWER_SETTINGS"])
 
     config = config_store.load()
     known_paths = config.known_paths
+    workers = max(1, settings.deletion_workers)
 
     def _generate() -> object:
         deleted_count = 0
@@ -481,6 +508,9 @@ def post_empty_trash() -> Response:
             for review_path in known_paths:
                 if not review_path.is_dir():
                     continue
+
+                # Phase 1 — scan and emit "deleting" events for each candidate.
+                candidates: list[Path] = []
                 for candidate in sorted(review_path.rglob("*")):
                     if not candidate.is_file():
                         continue
@@ -497,29 +527,48 @@ def post_empty_trash() -> Response:
                             {"type": "skipped", "path": str(candidate), "reason": "locked"}
                         ) + "\n"
                         continue
+                    candidates.append(candidate)
                     yield json.dumps({"type": "deleting", "path": str(candidate)}) + "\n"
-                    try:
-                        for companion_suffix in (".lock", ".trash", ".seen"):
-                            companion = candidate.with_suffix(
-                                f"{candidate.suffix}{companion_suffix}"
-                            )
-                            if companion.exists():
-                                companion.unlink()
-                        thumbnail_cache.delete_thumbnail(candidate, review_path)
-                        candidate.unlink()
-                        deleted_count += 1
-                        yield json.dumps({"type": "deleted", "path": str(candidate)}) + "\n"
-                    except OSError as exc:
-                        error_count += 1
-                        yield json.dumps(
-                            {"type": "error", "path": str(candidate), "message": exc.strerror}
-                        ) + "\n"
-                thumbnail_cache.prune_orphaned_thumbnails(review_path)
-        except GeneratorExit:
-            pass
-        finally:
+
+                # Phase 2 — delete in parallel and stream results as they finish.
+                with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
+                    futures_map = {
+                        executor.submit(
+                            _delete_trashed_file, c, review_path, thumbnail_cache
+                        ): c
+                        for c in candidates
+                    }
+                    for future in concurrent.futures.as_completed(futures_map):
+                        try:
+                            result = future.result()
+                        except Exception as exc:  # noqa: BLE001
+                            result = {
+                                "type": "error",
+                                "path": str(futures_map[future]),
+                                "message": str(exc),
+                            }
+                        if result["type"] == "deleted":
+                            deleted_count += 1
+                        elif result["type"] == "error":
+                            error_count += 1
+                        yield json.dumps(result) + "\n"
+
+                # Per-folder completion signal (sent before thumbnail prune).
+                yield json.dumps({"type": "folder_done", "path": str(review_path)}) + "\n"
+
+                # Prune orphaned thumbnails (best-effort; errors are non-fatal).
+                try:
+                    thumbnail_cache.prune_orphaned_thumbnails(review_path)
+                except Exception as exc:  # noqa: BLE001
+                    current_app.logger.warning(
+                        "prune_orphaned_thumbnails failed for %s: %s", review_path, exc
+                    )
+
+            # All review paths processed — emit terminal summary event.
             summary = {"type": "done", "deleted": deleted_count, "errors": error_count}
             yield json.dumps(summary) + "\n"
+        except GeneratorExit:
+            return  # Client disconnected; stop cleanly without yielding after close.
 
     return Response(stream_with_context(_generate()), mimetype="application/x-ndjson")
 

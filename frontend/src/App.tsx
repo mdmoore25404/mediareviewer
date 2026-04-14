@@ -86,6 +86,7 @@ function App(): ReactElement {
   const [isScanLoading, setIsScanLoading] = useState<boolean>(false);
   const [isFetchingMore, setIsFetchingMore] = useState<boolean>(false);
   const [hasMore, setHasMore] = useState<boolean>(false);
+  const [fetchMoreFailed, setFetchMoreFailed] = useState<boolean>(false);
   const scanAbortRef = useRef<AbortController | null>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
   const [isSubmittingPath, setIsSubmittingPath] = useState<boolean>(false);
@@ -195,8 +196,7 @@ function App(): ReactElement {
         return;
       }
       if (event.key === "ArrowLeft") {
-        const nextIndex = activeReviewIndex === 0 ? displayedItems.length - 1 : activeReviewIndex - 1;
-        setActiveReviewPath(displayedItems[nextIndex]?.path ?? null);
+        showPreviousReviewItem();
         return;
       }
       if (event.key.toLowerCase() === "d" || event.key.toLowerCase() === "t") {
@@ -288,11 +288,12 @@ function App(): ReactElement {
   };
 
   const handleLoadMore = async (): Promise<void> => {
-    if (!selectedPath || isFetchingMore || isScanLoading || !hasMore) return;
+    if (!selectedPath || isFetchingMore || isScanLoading || !hasMore || fetchMoreFailed) return;
 
     const controller = new AbortController();
     scanAbortRef.current = controller;
     setIsFetchingMore(true);
+    setFetchMoreFailed(false);
 
     try {
       const offset = mediaItems.length;
@@ -308,6 +309,7 @@ function App(): ReactElement {
       if (count === 0) setHasMore(false);
     } catch (error: unknown) {
       if ((error as Error).name === "AbortError") return;
+      setFetchMoreFailed(true);
       const message = error instanceof Error ? error.message : "Unable to load more items.";
       setErrorMessage(message);
     } finally {
@@ -322,7 +324,7 @@ function App(): ReactElement {
 
     const observer = new IntersectionObserver(
       (entries) => {
-        if (entries[0]?.isIntersecting) {
+        if (entries[0]?.isIntersecting && !fetchMoreFailed) {
           void handleLoadMore();
         }
       },
@@ -333,7 +335,7 @@ function App(): ReactElement {
       observer.disconnect();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasMore, isFetchingMore, isScanLoading, selectedPath, mediaItems.length]);
+  }, [hasMore, isFetchingMore, isScanLoading, selectedPath, mediaItems.length, fetchMoreFailed]);
 
   const handleAddPath = async (): Promise<void> => {
     if (!newPathInput.trim()) {
@@ -455,11 +457,10 @@ function App(): ReactElement {
   };
 
   const showPreviousReviewItem = (): void => {
-    if (displayedItems.length === 0 || activeReviewIndex === -1) {
+    if (displayedItems.length === 0 || activeReviewIndex <= 0) {
       return;
     }
-    const nextIndex = activeReviewIndex === 0 ? displayedItems.length - 1 : activeReviewIndex - 1;
-    setActiveReviewPath(displayedItems[nextIndex]?.path ?? null);
+    setActiveReviewPath(displayedItems[activeReviewIndex - 1]?.path ?? null);
   };
 
   const showNextReviewItem = (): void => {
@@ -474,7 +475,14 @@ function App(): ReactElement {
     const nextIndex = activeReviewIndex + 1;
     if (nextIndex >= displayedItems.length) {
       // Don't wrap to the start when more items are loading or still to come
-      if (hasMore) return;
+      if (hasMore) {
+        if (fetchMoreFailed && !isFetchingMore) {
+          // Retry the failed load when user advances past the last known item
+          setFetchMoreFailed(false);
+          void handleLoadMore();
+        }
+        return;
+      }
       setActiveReviewPath(displayedItems[0]?.path ?? null);
       return;
     }
@@ -921,6 +929,7 @@ function App(): ReactElement {
                   onClick={() => {
                     showPreviousReviewItem();
                   }}
+                  disabled={activeReviewIndex === 0}
                 >
                   Prev
                 </button>
@@ -932,6 +941,19 @@ function App(): ReactElement {
                       <span className="review-counter-loading-text">Loading more…</span>
                     </span>
                   )}
+                  {fetchMoreFailed && hasMore && !isFetchingMore && (
+                    <button
+                      type="button"
+                      className="review-counter-retry btn btn-link btn-sm p-0 ms-2"
+                      onClick={() => {
+                        setFetchMoreFailed(false);
+                        void handleLoadMore();
+                      }}
+                    >
+                      <i className="fa-solid fa-rotate me-1" aria-hidden="true" />
+                      Retry
+                    </button>
+                  )}
                 </p>
                 <button
                   type="button"
@@ -939,6 +961,9 @@ function App(): ReactElement {
                   onClick={() => {
                     showNextReviewItem();
                   }}
+                  disabled={
+                    activeReviewIndex === displayedItems.length - 1 && !hasMore && !isFetchingMore
+                  }
                 >
                   Next
                 </button>
