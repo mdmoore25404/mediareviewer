@@ -21,6 +21,80 @@ body {
   min-height: 100vh;
 }
 
+.app-topnav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.65rem 1.5rem;
+  background: rgba(255, 255, 255, 0.88);
+  backdrop-filter: blur(14px);
+  border-bottom: 1px solid rgba(19, 34, 56, 0.09);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.app-topnav-brand {
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: #132238;
+  letter-spacing: -0.01em;
+}
+
+.app-topnav-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.app-status-dot {
+  display: inline-block;
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 50%;
+  flex-shrink: 0;
+  vertical-align: middle;
+}
+
+.app-status-dot--ok {
+  background: #22c55e;
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.2);
+}
+
+.app-status-dot--unknown {
+  background: #94a3b8;
+}
+
+.settings-dialog {
+  background: #ffffff;
+  border: 1px solid rgba(19, 34, 56, 0.1);
+  border-radius: 1.25rem;
+  padding: 1.75rem;
+  max-width: 480px;
+  width: 90%;
+  color: #132238;
+  margin: auto;
+  align-self: center;
+}
+
+.settings-section-label {
+  margin-bottom: 0.35rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #526173;
+}
+
+.settings-path-value {
+  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+  font-size: 0.82rem;
+  word-break: break-all;
+  background: rgba(19, 34, 56, 0.04);
+  border-radius: 0.4rem;
+  padding: 0.4rem 0.65rem;
+}
+
 .status-card {
   border: 1px solid rgba(19, 34, 56, 0.08);
   border-radius: 1.75rem;

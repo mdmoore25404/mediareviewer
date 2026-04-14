@@ -106,6 +106,7 @@ function App(): ReactElement {
   );
   const [showHelp, setShowHelp] = useState<boolean>(false);
   const [trashLockedWarning, setTrashLockedWarning] = useState<TrashLockedWarning | null>(null);
+  const [showSettings, setShowSettings] = useState<boolean>(false);
 
   useEffect(() => {
     const abortController = new AbortController();
@@ -124,6 +125,7 @@ function App(): ReactElement {
           setSelectedPath(pathsPayload.knownPaths[0]);
         }
       } catch (error: unknown) {
+        if (error instanceof Error && error.name === "AbortError") return;
         const message = error instanceof Error ? error.message : "Unable to load API status.";
         setErrorMessage(message);
       } finally {
@@ -530,23 +532,28 @@ function App(): ReactElement {
 
   return (
     <main className="app-shell">
+      <nav className="app-topnav" aria-label="Application navigation">
+        <span className="app-topnav-brand">Media Reviewer</span>
+        <div className="app-topnav-actions">
+          <span
+            className={`app-status-dot app-status-dot--${health?.status === "ok" ? "ok" : "unknown"}`}
+            title={`API: ${health?.status ?? "loading\u2026"}`}
+            aria-label={`API status: ${health?.status ?? "loading"}`}
+          />
+          <button
+            type="button"
+            className="btn btn-sm btn-outline-secondary"
+            title="Settings"
+            aria-label="Open settings"
+            onClick={() => {
+              setShowSettings(true);
+            }}
+          >
+            <i className="fa-solid fa-gear" aria-hidden="true" />
+          </button>
+        </div>
+      </nav>
       <section className="container py-4 py-lg-5">
-        <header className="status-card mb-4">
-          <div className="d-flex flex-column flex-lg-row justify-content-between gap-3 align-items-start">
-            <div>
-              <p className="eyebrow">Media Reviewer Prototype</p>
-              <h1 className="display-6 fw-semibold mb-2">Trailcam review dashboard</h1>
-              <p className="mb-0 text-secondary">
-                Manage review roots, scan recursively, and set lock or trash decisions from one
-                screen.
-              </p>
-            </div>
-            <div className="summary-pill">
-              <i className="fa-solid fa-leaf me-2" aria-hidden="true" />
-              low-resource mode
-            </div>
-          </div>
-        </header>
 
         {isBootLoading && <p>Loading API and path configuration...</p>}
 
@@ -629,23 +636,7 @@ function App(): ReactElement {
                   {isRemovingPath ? "Removing..." : "Remove selected path"}
                 </button>
 
-                <div className="metric-card mt-3">
-                  <p className="metric-label">API status</p>
-                  <p className="metric-value mb-2">{health?.status ?? "unknown"}</p>
-                  <p className="small text-secondary mb-1">
-                    State directory: {health?.settings.stateDirectory ?? "-"}
-                  </p>
-                  <p className="small text-secondary mb-0">Hidden paths: {hiddenPaths.length}</p>
-                </div>
 
-                <details className="mt-3">
-                  <summary className="small fw-semibold text-secondary">Hidden picker paths</summary>
-                  <ul className="small mt-2 mb-0 ps-3">
-                    {hiddenPaths.map((path) => (
-                      <li key={path}>{path}</li>
-                    ))}
-                  </ul>
-                </details>
               </section>
             </aside>
 
@@ -1150,6 +1141,81 @@ function App(): ReactElement {
             trashAbortRef.current?.abort();
           }}
         />
+        {showSettings && (
+          <div
+            className="review-overlay"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Settings"
+            data-testid="settings-dialog"
+            onClick={(event) => {
+              if (event.target === event.currentTarget) setShowSettings(false);
+            }}
+          >
+            <div className="settings-dialog">
+              <div className="d-flex align-items-center justify-content-between mb-4">
+                <h2 className="h5 mb-0">
+                  <i className="fa-solid fa-gear me-2" aria-hidden="true" />
+                  Settings
+                </h2>
+                <button
+                  type="button"
+                  className="btn-close"
+                  aria-label="Close settings"
+                  onClick={() => {
+                    setShowSettings(false);
+                  }}
+                />
+              </div>
+
+              <div className="mb-3">
+                <p className="settings-section-label">API status</p>
+                <p className="mb-0">
+                  <span
+                    className={`app-status-dot app-status-dot--${health?.status === "ok" ? "ok" : "unknown"} me-2`}
+                    aria-hidden="true"
+                  />
+                  {health?.status ?? "unknown"}
+                </p>
+              </div>
+
+              <div className="mb-3">
+                <p className="settings-section-label">State directory</p>
+                <p className="settings-path-value mb-0">
+                  {health?.settings.stateDirectory ?? "-"}
+                </p>
+              </div>
+
+              <div className="mb-3">
+                <p className="settings-section-label">
+                  Hidden picker paths ({hiddenPaths.length})
+                </p>
+                {hiddenPaths.length === 0 ? (
+                  <p className="small text-secondary mb-0">None configured.</p>
+                ) : (
+                  <ul className="small mb-0 ps-3">
+                    {hiddenPaths.map((path) => (
+                      <li key={path}>{path}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+
+              <div className="mb-0">
+                <p className="settings-section-label">Video preload buffer</p>
+                <p className="mb-0 small">
+                  {health?.settings.videoPreloadMb != null
+                    ? `${health.settings.videoPreloadMb} MB`
+                    : "-"}
+                  <span className="text-secondary ms-2">
+                    (set via <code>MEDIAREVIEWER_VIDEO_PRELOAD_MB</code>)
+                  </span>
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {trashLockedWarning && (
           <div
             className="review-overlay"

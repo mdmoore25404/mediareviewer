@@ -179,7 +179,7 @@ describe("App", () => {
     render(<App />);
 
     await waitFor(() => {
-      expect(screen.getByText("Trailcam review dashboard")).toBeInTheDocument();
+      expect(screen.getByText("Media Reviewer")).toBeInTheDocument();
       expect(screen.getByLabelText("Known path")).toHaveValue("/home/michaelmoore/trailcam");
     });
 
