@@ -1,35 +1,21 @@
 # Current Status
 
-- date: 2026-04-12
-- state: scaffold complete
-- completed in this request:
-  - reviewed the product prompt and captured the first safe implementation slice.
-  - initialized the repository.
-  - created Copilot guidance, coding standards, and filesystem TODO tracking.
-  - scaffolded the Flask API, React client, API docs, linting, and tests.
-  - validated the scaffold with backend and frontend lint/test gates.
-  - implemented persisted known review paths in `~/.mediareviewer/config.yaml`.
-  - implemented recursive media scanning with non-media filtering and typed payloads.
-  - implemented companion actions endpoint for `lock`, `trash`, `seen`, and `unseen`.
-  - validated backend changes with `ruff` and `pytest` (6 tests passing).
-  - implemented frontend prototype for path management, scanning, filtering, sorting, and actions.
-  - added root `dev.sh` helper for start/stop/restart/status/lint/test workflows.
-  - validated full backend and frontend suites through `./dev.sh lint` and `./dev.sh test`.
-  - documented x86_64 and ARM64 (Apple Silicon) runtime portability expectations.
-  - documented Docker multi-arch manifest requirements for linux/amd64 and linux/arm64.
-  - moved frontend/backend listen and port configuration into `~/.mediareviewer/config.yaml` and wired `dev.sh` to report access URLs.
-  - added committed backend `requirements.txt` and `requirements-dev.txt` files.
-  - added YAML-configurable trusted hosts for Flask and Vite dev access beyond localhost.
-  - added image/video thumbnails to grid and list views using a protected media streaming endpoint.
-  - added disk-backed cached thumbnail generation, with freedesktop-style Linux cache layout and app-managed fallback on macOS and Windows.
-  - implemented fullscreen review mode with prev/next navigation and keyboard controls.
-  - added swipe/touch navigation in fullscreen review mode.
-  - fixed `dev.sh restart` so frontend/backend ports are actually released and rebound cleanly.
-- completed in latest request:
-  - installed ffmpeg and ffmpegthumbnailer packages for video frame extraction.
-  - moved thumbnail cache from centralized locations to mounted folder level (`.thumbnails` at root of each review path) for multi-instance sharing.
-  - integrated ffmpeg-based video frame extraction for real video thumbnails with graceful fallback to placeholders.
-  - added thumbnail deletion when media items are marked as trashed for cache consistency.
-  - added fullscreen review mode keyboard shortcuts: D/T for trash, S for seen, F/L for lock.
-  - validated all changes with ruff lint, pytest backend tests, and vitest frontend tests.
-- next target:
+- date: 2026-04-14
+- state: active development — core review workflow complete and in daily use
+- recent completions (commits 553d987 – a20eef0):
+  - server-side status filtering (`statusFilter` query param on stream endpoint; applied before limit/offset)
+  - video thumbnail fix: mtime=0 on placeholder so ffmpeg retries; TimeoutExpired caught; tempfile.mkstemp race fix
+  - background thumbnail warm thread started on each scan; orphan thumbnails pruned by empty-trash
+  - `prune_orphaned_thumbnails()` on `ThumbnailCacheService` (reads Thumb::URI PNG metadata)
+  - ruff / noqa: E501 pattern documented in lint-notes; existing violation in api.py fixed
+  - backlog reorganised into Completed / Planned / Stretch headings
+- current state of the product:
+  - Flask API (Python 3.12, ruff, 43 pytest tests) listening on 127.0.0.1:5200
+  - React/Vite frontend (TypeScript, eslint, 12 vitest tests) listening on 0.0.0.0:6913
+  - companion-file state machine: .lock / .trash / .seen beside each media file
+  - NDJSON stream scan with server-side statusFilter, offset pagination, infinite scroll
+  - review mode: prev/next, keyboard shortcuts, swipe, auto-advance, locked-item protection
+  - thumbnails: PIL for images; ffmpeg frame at 2 s for video; `<review_path>/.thumbnails/` cache
+  - single-container Docker image (ubuntu:24.04, multi-arch plan); docker-compose with bind mounts
+  - dev.sh: start / stop / restart / status / lint / test
+- next target: (not yet chosen — see backlog Planned section)
