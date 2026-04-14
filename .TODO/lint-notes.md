@@ -9,3 +9,5 @@
 - Prefer explicit return types on helpers even when inference would work.
 - Keep API documentation updated when routes or payloads change.
 - Keep pytest setup blocks wrapped across lines to stay inside the 100-character ruff limit.
+- When importing multiple names from the same module would exceed 100 chars, use a parenthesised multi-line import rather than a `# noqa: E501` suppressor.
+- **E501 in string literals and `query_string` dicts**: long inline strings inside `jsonify({"error": ...})` calls, `query_string` keyword arguments, and similar dictionary/call expressions are a common E501 source. Break them onto multiple lines using a parenthesised continuation or a named variable before the call — never suppress with `# noqa`.

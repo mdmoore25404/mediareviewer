@@ -10,3 +10,6 @@ description: "Use when editing Media Reviewer backend Python files. Enforce expl
 - Prefer dataclasses and small service classes for configuration and background job orchestration.
 - Add or revise pytest coverage when routes, services, or configuration behavior changes.
 - Run `ruff check backend/src backend/tests` and the relevant pytest targets before closing the request.
+- Consult `.TODO/lint-notes.md` before writing code. Key Python/ruff pitfalls to avoid:
+  - Keep all line lengths ≤ 100 characters; break long `jsonify`, `query_string`, and dict literals across lines using parenthesised continuations — never use `# noqa: E501`.
+  - Keep imports at module scope and sorted.
