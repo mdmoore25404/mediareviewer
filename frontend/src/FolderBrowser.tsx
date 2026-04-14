@@ -22,8 +22,16 @@ interface FolderNode {
   error: string | null;
 }
 
+const FS_ROOT: FolderNode = {
+  info: { path: "/", name: "/", has_children: true },
+  children: null,
+  isLoading: false,
+  isExpanded: false,
+  error: null,
+};
+
 function buildRootNodes(knownPaths: string[]): FolderNode[] {
-  return knownPaths.map((path) => ({
+  const knownNodes = knownPaths.map((path) => ({
     info: {
       path,
       name: path,
@@ -34,6 +42,7 @@ function buildRootNodes(knownPaths: string[]): FolderNode[] {
     isExpanded: false,
     error: null,
   }));
+  return [{ ...FS_ROOT }, ...knownNodes];
 }
 
 function updateNodeByPath(
@@ -138,6 +147,7 @@ function FolderNodeRow({ node, depth, onToggle, onSelect }: FolderNodeRowProps):
 
 export function FolderBrowser({
   knownPaths,
+  hiddenPaths,
   onSelectFolder,
   onClose,
 }: FolderBrowserProps): ReactElement {
@@ -173,11 +183,14 @@ export function FolderBrowser({
 
         void fetchFolders(path, new AbortController().signal)
           .then((result) => {
+            const visible = result.folders.filter(
+              (f) => !hiddenPaths.some((h) => f.path === h || f.path.startsWith(h + "/")),
+            );
             setNodes((current) =>
               updateNodeByPath(current, path, (n) => ({
                 ...n,
                 isLoading: false,
-                children: result.folders.map((folder) => ({
+                children: visible.map((folder) => ({
                   info: folder,
                   children: null,
                   isLoading: false,
@@ -202,7 +215,7 @@ export function FolderBrowser({
         return updated;
       });
     },
-    [],
+    [hiddenPaths],
   );
 
   const handleSelect = useCallback(
@@ -228,21 +241,15 @@ export function FolderBrowser({
         />
       </div>
       <div className="folder-browser-body p-2 overflow-auto">
-        {nodes.length === 0 ? (
-          <p className="small text-secondary p-2 mb-0">
-            No review paths configured. Add one above.
-          </p>
-        ) : (
-          nodes.map((node) => (
-            <FolderNodeRow
-              key={node.info.path}
-              node={node}
-              depth={0}
-              onToggle={handleToggle}
-              onSelect={handleSelect}
-            />
-          ))
-        )}
+        {nodes.map((node) => (
+          <FolderNodeRow
+            key={node.info.path}
+            node={node}
+            depth={0}
+            onToggle={handleToggle}
+            onSelect={handleSelect}
+          />
+        ))}
       </div>
     </div>
   );

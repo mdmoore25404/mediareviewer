@@ -5,6 +5,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FolderBrowser } from "../FolderBrowser";
 import type { FoldersResponse } from "../api/types";
 
+const rootFoldersResponse: FoldersResponse = {
+  path: "/",
+  folders: [
+    { path: "/home", name: "home", has_children: true },
+    { path: "/mnt", name: "mnt", has_children: true },
+    { path: "/proc", name: "proc", has_children: false },
+  ],
+};
+
 const foldersResponse: FoldersResponse = {
   path: "/home/michaelmoore/trailcam",
   folders: [
@@ -30,6 +39,12 @@ describe("FolderBrowser", () => {
 
       if (url.startsWith("/api/folders?")) {
         const folderParam = new URL(url, "http://localhost").searchParams.get("path");
+        if (folderParam === "/") {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve(rootFoldersResponse),
+          });
+        }
         if (folderParam === "/home/michaelmoore/trailcam/Videos") {
           return Promise.resolve({
             ok: true,
@@ -68,7 +83,7 @@ describe("FolderBrowser", () => {
     expect(screen.getByText("/home/michaelmoore/trailcam")).toBeInTheDocument();
   });
 
-  it("shows empty state when no known paths provided", () => {
+  it("always shows the filesystem root '/' as a browsable root", () => {
     render(
       <FolderBrowser
         knownPaths={[]}
@@ -78,7 +93,7 @@ describe("FolderBrowser", () => {
       />,
     );
 
-    expect(screen.getByText(/No review paths configured/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Expand \// })).toBeInTheDocument();
   });
 
   it("expands a root folder to show child folders", async () => {
@@ -142,6 +157,25 @@ describe("FolderBrowser", () => {
 
     expect(onSelectFolder).toHaveBeenCalledWith("/home/michaelmoore/trailcam");
     expect(onClose).toHaveBeenCalled();
+  });
+
+  it("filters hidden paths from expanded children", async () => {
+    render(
+      <FolderBrowser
+        knownPaths={[]}
+        hiddenPaths={["/proc"]}
+        onSelectFolder={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: /Expand \// }));
+
+    await waitFor(() => {
+      expect(screen.getByText("home")).toBeInTheDocument();
+      expect(screen.getByText("mnt")).toBeInTheDocument();
+      expect(screen.queryByText("proc")).not.toBeInTheDocument();
+    });
   });
 
   it("calls onClose when the close button is clicked", async () => {
