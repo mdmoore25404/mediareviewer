@@ -2,6 +2,7 @@ export interface HealthSettings {
   stateDirectory: string;
   hiddenPickerPaths: string[];
   deletionWorkers: number;
+  videoPreloadMb: number;
 }
 
 export interface DeletionQueueSnapshot {

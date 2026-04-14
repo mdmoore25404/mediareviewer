@@ -31,6 +31,7 @@ def test_health_endpoint_returns_configured_status(tmp_path: Path) -> None:
             "stateDirectory": str(tmp_path),
             "hiddenPickerPaths": [str(tmp_path / "hidden")],
             "deletionWorkers": 3,
+            "videoPreloadMb": 50,
         },
         "deletionQueue": {
             "max_workers": 3,

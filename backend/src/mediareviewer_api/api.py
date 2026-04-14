@@ -43,6 +43,7 @@ def get_health() -> Response:
             "stateDirectory": str(settings.state_directory),
             "hiddenPickerPaths": [str(path) for path in settings.hidden_picker_paths],
             "deletionWorkers": settings.deletion_workers,
+            "videoPreloadMb": settings.video_preload_mb,
         },
         "deletionQueue": asdict(queue_snapshot),
     }

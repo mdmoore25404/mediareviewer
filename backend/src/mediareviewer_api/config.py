@@ -77,6 +77,7 @@ class AppSettings:
     )
     trusted_hosts: tuple[str, ...] = ()
     deletion_workers: int = 2
+    video_preload_mb: int = 50
     thumbnail_cache_directory: Path = field(
         default_factory=lambda: _default_thumbnail_cache_directory(Path.home() / ".mediareviewer"),
     )
@@ -106,6 +107,7 @@ class AppSettings:
             hidden_picker_paths=_parse_hidden_paths(os.getenv("MEDIAREVIEWER_HIDDEN_PATHS")),
             trusted_hosts=yaml_trusted_hosts,
             deletion_workers=int(os.getenv("MEDIAREVIEWER_DELETION_WORKERS", "2")),
+            video_preload_mb=int(os.getenv("MEDIAREVIEWER_VIDEO_PRELOAD_MB", "50")),
             thumbnail_cache_directory=Path(
                 os.getenv(
                     "MEDIAREVIEWER_THUMBNAIL_CACHE_DIR",

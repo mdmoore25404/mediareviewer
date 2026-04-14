@@ -167,6 +167,11 @@ function App(): ReactElement {
 
   const activeReviewItem = activeReviewIndex >= 0 ? displayedItems[activeReviewIndex] : null;
 
+  const nextReviewItem =
+    activeReviewIndex >= 0 && activeReviewIndex < displayedItems.length - 1
+      ? (displayedItems[activeReviewIndex + 1] ?? null)
+      : null;
+
   useEffect(() => {
     if (activeReviewPath && activeReviewIndex === -1) {
       setActiveReviewPath(null);
@@ -1042,6 +1047,7 @@ function App(): ReactElement {
                       src={buildMediaFileUrl(activeReviewItem.path)}
                       autoPlay
                       playsInline
+                      preload="auto"
                       controls={showVideoControls}
                       onClick={(event) => {
                         if (showVideoControls) {
@@ -1057,6 +1063,17 @@ function App(): ReactElement {
                   )}
                 </div>
               </div>
+
+              {/* Pre-fetch next item to eliminate navigation flicker */}
+              {nextReviewItem && (
+                <div style={{ display: "none" }} aria-hidden="true">
+                  {nextReviewItem.mediaType === "image" ? (
+                    <img src={buildMediaFileUrl(nextReviewItem.path)} alt="" />
+                  ) : (
+                    <video src={buildMediaFileUrl(nextReviewItem.path)} preload="auto" muted />
+                  )}
+                </div>
+              )}
 
               <div className="review-footer">
                 <div>

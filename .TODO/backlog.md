@@ -41,6 +41,7 @@
 - planned: video playback mini-controls in review mode — −5 s / +5 s skip, pause/play toggle, mute toggle; playback-speed selector (1×, 2×, 4×, 8×) persisted in `sessionStorage`; control group disabled for image items.
 - planned: strip the review-path prefix from file paths shown in the review dialog and grid cards; display only the relative path beneath the root.
 - planned: compact landscape info row — file size and modified timestamp on the same line as the filename in a smaller font to give more vertical space to the media preview.
+- planned: expose `video_preload_mb` as a configurable setting via `GET/PATCH /api/settings` endpoint and a settings panel in the frontend UI; currently only configurable via YAML (`~/.mediareviewer/config.yaml`) or environment variable (`MEDIAREVIEWER_VIDEO_PRELOAD_MB`).
 
 ## Stretch goals
 
