@@ -51,7 +51,10 @@ def test_empty_trash_deletes_trashed_files(tmp_path: Path) -> None:
     trash_file.with_suffix(".jpg.seen").write_text("", encoding="utf-8")
 
     client: FlaskClient = _make_client(tmp_path, review_directory)
-    response = client.post("/api/empty-trash")
+    response = client.post(
+        "/api/empty-trash",
+        json={"path": str(review_directory.resolve())},
+    )
 
     assert response.status_code == 200
     events = _parse_ndjson(response)
@@ -80,7 +83,10 @@ def test_empty_trash_skips_locked_files(tmp_path: Path) -> None:
     media_file.with_suffix(".mp4.lock").write_text("", encoding="utf-8")
 
     client: FlaskClient = _make_client(tmp_path, review_directory)
-    response = client.post("/api/empty-trash")
+    response = client.post(
+        "/api/empty-trash",
+        json={"path": str(review_directory.resolve())},
+    )
 
     assert response.status_code == 200
     events = _parse_ndjson(response)
@@ -101,7 +107,10 @@ def test_empty_trash_returns_zero_when_nothing_trashed(tmp_path: Path) -> None:
     (review_directory / "frame001.jpg").write_bytes(b"img")
 
     client: FlaskClient = _make_client(tmp_path, review_directory)
-    response = client.post("/api/empty-trash")
+    response = client.post(
+        "/api/empty-trash",
+        json={"path": str(review_directory.resolve())},
+    )
 
     assert response.status_code == 200
     events = _parse_ndjson(response)

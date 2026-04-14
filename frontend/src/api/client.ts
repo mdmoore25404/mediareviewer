@@ -150,11 +150,13 @@ export function buildMediaThumbnailUrl(path: string, size: number): string {
 
 /** Stream NDJSON progress events from the empty-trash endpoint. */
 export async function* streamEmptyTrash(
+  path: string,
   signal: AbortSignal,
 ): AsyncGenerator<TrashProgressEvent> {
   const response = await fetch("/api/empty-trash", {
     method: "POST",
-    headers: { Accept: "application/x-ndjson" },
+    headers: { Accept: "application/x-ndjson", "Content-Type": "application/json" },
+    body: JSON.stringify({ path }),
     signal,
   });
   if (!response.ok || !response.body) {

@@ -411,7 +411,7 @@ function App(): ReactElement {
     setErrorMessage(null);
     const deletedPaths: string[] = [];
     try {
-      for await (const event of streamEmptyTrash(controller.signal)) {
+      for await (const event of streamEmptyTrash(selectedPath, controller.signal)) {
         setTrashEvents((prev) => [...prev, event]);
         if (event.type === "deleted" && event.path) {
           deletedPaths.push(event.path);

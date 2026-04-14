@@ -515,14 +515,21 @@ def post_empty_trash() -> Response:
     settings = cast(AppSettings, current_app.config["MEDIAREVIEWER_SETTINGS"])
 
     config = config_store.load()
-    known_paths = config.known_paths
     workers = max(1, settings.deletion_workers)
+
+    request_body = request.get_json(silent=True) or {}
+    raw_path = request_body.get("path", "")
+    if not raw_path:
+        return jsonify({"error": "'path' is required."}), 400
+    target_path = Path(raw_path).expanduser().resolve()
+    if target_path not in config.known_paths:
+        return jsonify({"error": "Path is not a configured review path."}), 403
 
     def _generate() -> object:
         deleted_count = 0
         error_count = 0
         try:
-            for review_path in known_paths:
+            for review_path in [target_path]:
                 if not review_path.is_dir():
                     continue
 
