@@ -500,3 +500,83 @@ body {
     max-height: calc(100vh - 7rem);
   }
 }
+
+/* ─── Dark mode overrides ────────────────────────────────────────────────── */
+/* Bootstrap 5.3 handles forms, buttons, and text via data-bs-theme="dark".  */
+/* The rules below override the custom components that Bootstrap doesn't own.  */
+
+html[data-bs-theme="dark"] {
+  /* Page background */
+  background:
+    radial-gradient(circle at top left, rgba(245, 171, 53, 0.10), transparent 32%),
+    radial-gradient(circle at top right, rgba(42, 122, 226, 0.10), transparent 28%),
+    linear-gradient(180deg, #0d1825 0%, #111e2e 100%);
+}
+
+html[data-bs-theme="dark"] .app-topnav {
+  background: rgba(10, 18, 30, 0.88);
+  border-bottom-color: rgba(255, 255, 255, 0.08);
+}
+
+html[data-bs-theme="dark"] .app-topnav-brand {
+  color: #d4dfe8;
+}
+
+html[data-bs-theme="dark"] .status-card {
+  background: rgba(18, 30, 48, 0.92);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+html[data-bs-theme="dark"] .media-card,
+html[data-bs-theme="dark"] .media-row {
+  background: #16243a;
+  border-color: rgba(255, 255, 255, 0.09);
+}
+
+html[data-bs-theme="dark"] .media-preview-shell {
+  background: linear-gradient(180deg, #0a1825 0%, #112035 100%);
+  border-color: rgba(255, 255, 255, 0.07);
+}
+
+html[data-bs-theme="dark"] .media-badge {
+  background: rgba(42, 122, 226, 0.18);
+  color: #7db4f5;
+}
+
+html[data-bs-theme="dark"] .folder-browser {
+  background: rgba(12, 22, 36, 0.97);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+html[data-bs-theme="dark"] .folder-browser-name-btn {
+  color: #c8d8e8;
+}
+
+html[data-bs-theme="dark"] .folder-browser-name-btn:hover {
+  color: #7db4f5;
+}
+
+html[data-bs-theme="dark"] .folder-browser-row:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+html[data-bs-theme="dark"] .settings-dialog {
+  background: #152032;
+  border-color: rgba(255, 255, 255, 0.1);
+  color: #d4dfe8;
+}
+
+html[data-bs-theme="dark"] .settings-section-label {
+  color: #7a9ab8;
+}
+
+html[data-bs-theme="dark"] .settings-path-value {
+  background: rgba(255, 255, 255, 0.06);
+  color: #b8cfe0;
+}
+
+html[data-bs-theme="dark"] .metric-card {
+  background: linear-gradient(180deg, #1a2c40 0%, #16243a 100%);
+  border-color: rgba(170, 90, 18, 0.18);
+}
+

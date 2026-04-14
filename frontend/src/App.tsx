@@ -20,6 +20,8 @@ import type {
 } from "./api/types";
 import { TrashProgressDialog } from "./TrashProgressDialog";
 import { FolderBrowser } from "./FolderBrowser";
+import { useTheme } from "./useTheme";
+import type { ThemeMode } from "./useTheme";
 
 type ViewMode = "grid" | "list";
 type MediaFilter = "all" | "image" | "video";
@@ -68,6 +70,18 @@ function formatSize(sizeBytes: number): string {
   return `${(mib / 1024).toFixed(1)} GiB`;
 }
 
+function themeIcon(mode: ThemeMode): string {
+  if (mode === "light") return "fa-sun";
+  if (mode === "dark") return "fa-moon";
+  return "fa-circle-half-stroke";
+}
+
+function themeLabel(mode: ThemeMode): string {
+  if (mode === "light") return "Light mode (click for dark)";
+  if (mode === "dark") return "Dark mode (click for auto)";
+  return "Auto mode (click for light)";
+}
+
 function App(): ReactElement {
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [knownPaths, setKnownPaths] = useState<string[]>([]);
@@ -107,6 +121,7 @@ function App(): ReactElement {
   const [showHelp, setShowHelp] = useState<boolean>(false);
   const [trashLockedWarning, setTrashLockedWarning] = useState<TrashLockedWarning | null>(null);
   const [showSettings, setShowSettings] = useState<boolean>(false);
+  const [themeMode, cycleTheme] = useTheme();
 
   useEffect(() => {
     const abortController = new AbortController();
@@ -540,6 +555,15 @@ function App(): ReactElement {
             title={`API: ${health?.status ?? "loading\u2026"}`}
             aria-label={`API status: ${health?.status ?? "loading"}`}
           />
+          <button
+            type="button"
+            className="btn btn-sm btn-outline-secondary"
+            title={themeLabel(themeMode)}
+            aria-label={themeLabel(themeMode)}
+            onClick={cycleTheme}
+          >
+            <i className={`fa-solid ${themeIcon(themeMode)}`} aria-hidden="true" />
+          </button>
           <button
             type="button"
             className="btn btn-sm btn-outline-secondary"

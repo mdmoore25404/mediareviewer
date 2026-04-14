@@ -12,6 +12,7 @@ const healthResponse: HealthResponse = {
     stateDirectory: "/tmp/mediareviewer",
     hiddenPickerPaths: ["/proc"],
     deletionWorkers: 2,
+    videoPreloadMb: 50,
   },
   deletionQueue: {
     max_workers: 2,
@@ -338,5 +339,28 @@ describe("App", () => {
       expect(streamCall).toBeTruthy();
       expect(streamCall?.[0]).toContain("statusFilter=locked");
     });
+  });
+
+  it("theme toggle cycles through auto → light → dark", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(Object.getPrototypeOf(window.localStorage), "getItem").mockReturnValue(null);
+    vi.spyOn(Object.getPrototypeOf(window.localStorage), "setItem").mockImplementation(() => undefined);
+    render(<App />);
+
+    // Default is auto — icon is fa-circle-half-stroke title includes "Auto mode"
+    const toggleBtn = screen.getByRole("button", { name: /auto mode/i });
+    expect(toggleBtn).toBeInTheDocument();
+
+    // Click once → light
+    await user.click(toggleBtn);
+    expect(screen.getByRole("button", { name: /light mode/i })).toBeInTheDocument();
+
+    // Click again → dark
+    await user.click(screen.getByRole("button", { name: /light mode/i }));
+    expect(screen.getByRole("button", { name: /dark mode/i })).toBeInTheDocument();
+
+    // Click again → back to auto
+    await user.click(screen.getByRole("button", { name: /dark mode/i }));
+    expect(screen.getByRole("button", { name: /auto mode/i })).toBeInTheDocument();
   });
 });
