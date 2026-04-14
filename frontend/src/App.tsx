@@ -71,9 +71,9 @@ function formatSize(sizeBytes: number): string {
 }
 
 function themeIcon(mode: ThemeMode): string {
-  if (mode === "light") return "fa-sun";
-  if (mode === "dark") return "fa-moon";
-  return "fa-circle-half-stroke";
+  if (mode === "light") return "fa-sun theme-icon--light";
+  if (mode === "dark") return "fa-moon theme-icon--dark";
+  return "fa-circle-half-stroke theme-icon--auto";
 }
 
 function themeLabel(mode: ThemeMode): string {

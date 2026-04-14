@@ -47,6 +47,18 @@ body {
   gap: 0.75rem;
 }
 
+.theme-icon--light {
+  color: #d97706; /* amber-600 */
+}
+
+.theme-icon--dark {
+  color: #6d80ee; /* indigo */
+}
+
+.theme-icon--auto {
+  color: #4ba88a; /* teal */
+}
+
 .app-status-dot {
   display: inline-block;
   width: 0.55rem;
