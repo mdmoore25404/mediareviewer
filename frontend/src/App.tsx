@@ -240,9 +240,11 @@ function App(): ReactElement {
       }
     };
 
-    window.addEventListener("keydown", handleKeyDown);
+    // Use capture phase so this fires before shadow-DOM event retargeting
+    // inside native video controls swallows the event.
+    window.addEventListener("keydown", handleKeyDown, { capture: true });
     return () => {
-      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keydown", handleKeyDown, { capture: true });
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps -- showNextReviewItem captures displayedItems/activeReviewIndex which are already deps
   }, [activeReviewIndex, activeReviewItem, displayedItems, showHelp, trashLockedWarning]);
