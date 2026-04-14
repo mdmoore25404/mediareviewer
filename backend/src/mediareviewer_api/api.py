@@ -2,6 +2,7 @@
 
 import concurrent.futures
 import json
+import logging
 import os
 import threading
 from dataclasses import asdict
@@ -446,6 +447,22 @@ def post_media_action() -> Response:
     return jsonify(payload)
 
 
+def _prune_thumbnails_best_effort(
+    thumbnail_cache: ThumbnailCacheService,
+    review_path: Path,
+) -> None:
+    """Prune orphaned thumbnails for *review_path* without blocking the caller.
+
+    Intended to be run in a daemon thread so the NDJSON stream can close
+    immediately after all deletions are complete.
+    """
+    logger = logging.getLogger(__name__)
+    try:
+        thumbnail_cache.prune_orphaned_thumbnails(review_path)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("prune_orphaned_thumbnails failed for %s: %s", review_path, exc)
+
+
 def _delete_trashed_file(
     candidate: Path,
     review_path: Path,
@@ -553,16 +570,16 @@ def post_empty_trash() -> Response:
                             error_count += 1
                         yield json.dumps(result) + "\n"
 
-                # Per-folder completion signal (sent before thumbnail prune).
+                # Per-folder completion signal (immediately after deletion).
                 yield json.dumps({"type": "folder_done", "path": str(review_path)}) + "\n"
 
-                # Prune orphaned thumbnails (best-effort; errors are non-fatal).
-                try:
-                    thumbnail_cache.prune_orphaned_thumbnails(review_path)
-                except Exception as exc:  # noqa: BLE001
-                    current_app.logger.warning(
-                        "prune_orphaned_thumbnails failed for %s: %s", review_path, exc
-                    )
+                # Prune orphaned thumbnails in a background daemon thread so the
+                # stream can proceed (and close) without waiting for the prune.
+                threading.Thread(
+                    target=_prune_thumbnails_best_effort,
+                    args=(thumbnail_cache, review_path),
+                    daemon=True,
+                ).start()
 
             # All review paths processed — emit terminal summary event.
             summary = {"type": "done", "deleted": deleted_count, "errors": error_count}
