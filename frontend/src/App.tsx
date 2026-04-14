@@ -466,9 +466,9 @@ function App(): ReactElement {
     if (displayedItems.length === 0 || activeReviewIndex === -1) {
       return;
     }
-    // Pre-fetch the next batch when within 2 items of the end
+    // Pre-fetch the next batch when within 5 items of the end
     const itemsFromEnd = displayedItems.length - 1 - activeReviewIndex;
-    if (itemsFromEnd <= 2 && hasMore && !isFetchingMore) {
+    if (itemsFromEnd <= 5 && hasMore && !isFetchingMore) {
       void handleLoadMore();
     }
     const nextIndex = activeReviewIndex + 1;
@@ -926,6 +926,12 @@ function App(): ReactElement {
                 </button>
                 <p className="review-counter mb-0">
                   {activeReviewIndex + 1} / {displayedItems.length}
+                  {isFetchingMore && (
+                    <span className="review-counter-loading ms-2" aria-label="Loading more items">
+                      <span className="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true" />
+                      <span className="review-counter-loading-text">Loading more…</span>
+                    </span>
+                  )}
                 </p>
                 <button
                   type="button"

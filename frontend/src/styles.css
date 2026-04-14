@@ -243,6 +243,17 @@ body {
   font-weight: 700;
 }
 
+.review-counter-loading {
+  font-size: 0.72rem;
+  font-weight: 400;
+  opacity: 0.75;
+  white-space: nowrap;
+}
+
+.review-counter-loading-text {
+  font-style: italic;
+}
+
 .review-media-shell {
   min-height: 0;
   border-radius: 1rem;
