@@ -249,7 +249,7 @@ Applies a companion-file state action to a media file under a known review path.
 
 ## POST /api/empty-trash
 
-Permanently deletes all media files (and their companion files) that are marked as trashed across all configured known review paths.  Locked-and-trashed items are **skipped** to protect them from accidental deletion.
+Permanently deletes all media files (and their companion files) that are marked as trashed across all configured known review paths.  Locked-and-trashed items are **skipped** to protect them from accidental deletion.  After deleting trashed files, orphaned thumbnails (whose source media was removed outside this application) are also pruned from each review path's thumbnail cache.
 
 ### Request
 
@@ -302,9 +302,17 @@ Serves a PNG thumbnail from the on-disk cache, generating it if needed.
 ### Behavior
 
 - Image files are resized into a square PNG thumbnail.
-- Video files currently receive a generated placeholder thumbnail when no system thumbnail is already available.
-- On Linux, the cache location follows the freedesktop thumbnail directory convention by default.
-- On macOS and Windows, Media Reviewer uses its own cache directory because native file-explorer thumbnail caches are not public, stable integration points.
+- Video files have a frame extracted at the 2-second mark using `ffmpeg`.  If
+  `ffmpeg` is unavailable or the extraction fails, a labelled placeholder PNG
+  is returned for that request and the failure is not permanently cached — the
+  next request will retry `ffmpeg`.
+- Thumbnails are stored under `<review_path>/.thumbnails/` using a content-
+  addressed MD5 filename (following the freedesktop thumbnail specification).
+  The thumbnail's mtime is set to match the source media file so staleness is
+  detected automatically on modification.
+- When the stream endpoint starts a new scan, a background daemon thread
+  pre-generates thumbnails for every item in the path so that subsequent
+  page loads and filter changes find thumbnails already cached on disk.
 
 ### Errors
 

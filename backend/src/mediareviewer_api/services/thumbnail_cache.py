@@ -3,8 +3,10 @@
 import hashlib
 import os
 import subprocess
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
+from urllib.parse import unquote, urlparse
 
 from PIL import Image, ImageDraw, ImageOps, PngImagePlugin, UnidentifiedImageError
 
@@ -53,6 +55,10 @@ class ThumbnailCacheService:
                 self._generate_placeholder_thumbnail(
                     normalized_path, thumbnail_path, size, media_type
                 )
+                # Mark the cached placeholder as stale (mtime=0) so ffmpeg is
+                # retried on the next request rather than serving the placeholder
+                # forever.  A real file's mtime will always be > 0.
+                os.utime(thumbnail_path, (0, 0))
         else:
             self._generate_placeholder_thumbnail(
                 normalized_path, thumbnail_path, size, media_type
@@ -73,6 +79,44 @@ class ThumbnailCacheService:
             thumbnail_path = self._thumbnail_path_for_media(normalized_path, cache_root, size)
             if thumbnail_path.exists():
                 thumbnail_path.unlink()
+
+    def prune_orphaned_thumbnails(self, review_path: Path) -> int:
+        """Delete thumbnails whose source media file no longer exists.
+
+        Reads the ``Thumb::URI`` metadata embedded in each cached PNG to
+        reconstruct the original media path.  Any thumbnail whose source is
+        missing from disk is removed.  This covers two scenarios:
+
+        - The media file was permanently deleted through the app (empty-trash
+          cleans the specific thumbnail, but companions or edge cases can leave
+          orphans behind).
+        - The media file was deleted externally (outside this application).
+
+        Args:
+            review_path: The root of the mounted review folder.
+
+        Returns:
+            The number of orphaned thumbnail files that were removed.
+        """
+        normalized_review = review_path.expanduser().resolve()
+        cache_root = normalized_review / ".thumbnails"
+        if not cache_root.exists():
+            return 0
+        pruned = 0
+        for thumb_file in cache_root.rglob("*.png"):
+            try:
+                with Image.open(thumb_file) as img:
+                    thumb_uri = img.info.get("Thumb::URI", "")
+                if not thumb_uri:
+                    continue
+                parsed = urlparse(thumb_uri)
+                media_path = Path(unquote(parsed.path))
+                if not media_path.exists():
+                    thumb_file.unlink()
+                    pruned += 1
+            except (OSError, UnidentifiedImageError):
+                pass
+        return pruned
 
 
 
@@ -116,11 +160,22 @@ class ThumbnailCacheService:
         size: int,
     ) -> bool:
         """Extract a frame from a video using ffmpeg. Returns True if successful."""
+        temp_frame: Path | None = None
         try:
-            temp_frame = thumbnail_path.parent / f"{thumbnail_path.stem}_frame.jpg"
+            fd, temp_path = tempfile.mkstemp(
+                suffix="_frame.jpg",
+                dir=thumbnail_path.parent,
+            )
+            os.close(fd)
+            temp_frame = Path(temp_path)
+            vf = (
+                f"scale={size}:{size}:force_original_aspect_ratio=decrease,"
+                f"pad={size}:{size}:(ow-iw)/2:(oh-ih)/2:color=black"
+            )
             subprocess.run(
                 [
                     "ffmpeg",
+                    "-y",
                     "-i",
                     str(media_path),
                     "-ss",
@@ -128,21 +183,28 @@ class ThumbnailCacheService:
                     "-vframes",
                     "1",
                     "-vf",
-                    f"scale={size}:{size}:force_original_aspect_ratio=decrease,pad={size}:{size}:(ow-iw)/2:(oh-ih)/2:color=black",
+                    vf,
                     str(temp_frame),
                 ],
                 check=True,
                 capture_output=True,
-                timeout=10,
+                timeout=30,
             )
             with Image.open(temp_frame) as frame:
                 canvas = Image.new("RGB", (size, size), color=(0, 0, 0))
                 canvas.paste(frame, ((size - frame.width) // 2, (size - frame.height) // 2))
                 self._save_thumbnail_png(canvas, thumbnail_path, media_path)
-            temp_frame.unlink()
             return True
-        except (subprocess.CalledProcessError, FileNotFoundError, OSError):
+        except (
+            subprocess.CalledProcessError,
+            subprocess.TimeoutExpired,
+            FileNotFoundError,
+            OSError,
+        ):
             return False
+        finally:
+            if temp_frame is not None and temp_frame.exists():
+                temp_frame.unlink(missing_ok=True)
 
 
     def _generate_placeholder_thumbnail(

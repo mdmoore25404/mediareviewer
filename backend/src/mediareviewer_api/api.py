@@ -1,6 +1,8 @@
 """HTTP routes exposed by the Media Reviewer API."""
 
 import json
+import os
+import threading
 from dataclasses import asdict
 from pathlib import Path
 from typing import cast
@@ -210,6 +212,10 @@ def stream_media_items() -> Response:
         MediaScanner,
         current_app.extensions["mediareviewer.media_scanner"],
     )
+    thumbnail_cache = cast(
+        ThumbnailCacheService,
+        current_app.extensions["mediareviewer.thumbnail_cache"],
+    )
 
     raw_path = request.args.get("path", type=str)
     if not raw_path:
@@ -252,6 +258,17 @@ def stream_media_items() -> Response:
             yield json.dumps(item_payload) + "\n"
             count += 1
         yield json.dumps({"type": "done", "count": count}) + "\n"
+
+    # Start a low-priority daemon thread that warms the thumbnail cache for
+    # every item in the path (not just the current page) so future scrolls
+    # and filter changes find thumbnails ready on disk.
+    pregenerate_thread = threading.Thread(
+        target=_pregenerate_thumbnails,
+        args=(media_scanner, thumbnail_cache, requested_path, 256),
+        daemon=True,
+        name=f"thumb-warm-{requested_path.name}",
+    )
+    pregenerate_thread.start()
 
     return Response(generate(), content_type="application/x-ndjson")
 
@@ -350,7 +367,11 @@ def post_media_action() -> Response:
     if not isinstance(raw_path, str) or not raw_path.strip():
         return jsonify({"error": "Field 'path' must be a non-empty string."}), 400
     if action not in {"lock", "unlock", "trash", "untrash", "seen", "unseen"}:
-        return jsonify({"error": "Field 'action' must be one of lock, unlock, trash, untrash, seen, unseen."}), 400  # noqa: E501
+        msg = (
+            "Field 'action' must be one of"
+            " lock, unlock, trash, untrash, seen, unseen."
+        )
+        return jsonify({"error": msg}), 400
 
     media_path = Path(raw_path).expanduser().resolve()
     if not media_path.exists() or not media_path.is_file():
@@ -437,6 +458,9 @@ def post_empty_trash() -> Response:
                 deleted.append(str(candidate))
             except OSError as exc:
                 errors.append(f"{candidate}: {exc.strerror}")
+        # Remove orphaned thumbnails whose source files were deleted outside
+        # of this application (e.g. manual SD card management).
+        thumbnail_cache.prune_orphaned_thumbnails(review_path)
 
     return jsonify({"deleted": len(deleted), "paths": deleted, "errors": errors})
 
@@ -445,6 +469,40 @@ def _build_media_thumbnail_url(media_path: str, size: int) -> str:
     """Build a relative thumbnail route for a media item payload."""
 
     return f"/api/media-thumbnail?{urlencode({'path': media_path, 'size': size})}"
+
+
+def _pregenerate_thumbnails(
+    media_scanner: object,
+    thumbnail_cache_svc: object,
+    review_path: Path,
+    size: int,
+) -> None:
+    """Generate thumbnails for every media item in *review_path*.
+
+    Intended to run in a daemon background thread so that thumbnails are ready
+    before the user scrolls to them.  Already-cached and up-to-date thumbnails
+    are skipped quickly via the mtime check.  The thread runs at a lower
+    process-level CPU priority when ``os.nice`` is available.
+    """
+    try:
+        os.nice(10)
+    except (OSError, AttributeError):
+        pass
+    from mediareviewer_api.services.media_scanner import MediaScanner
+    from mediareviewer_api.services.thumbnail_cache import ThumbnailCacheService
+
+    scanner = cast(MediaScanner, media_scanner)
+    cache = cast(ThumbnailCacheService, thumbnail_cache_svc)
+    try:
+        for item in scanner.scan_stream(
+            root_path=review_path,
+            limit=100_000,
+            offset=0,
+            status_filter="all",
+        ):
+            cache.ensure_thumbnail(Path(item.path), review_path, size=size)
+    except Exception:  # noqa: BLE001 — background thread must not crash silently
+        pass
 
 
 def _is_hidden_path(candidate: Path, hidden_paths: tuple[Path, ...]) -> bool:
