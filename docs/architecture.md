@@ -163,7 +163,8 @@ sequenceDiagram
         end
 
         API->>TC: prune_orphaned_thumbnails(review_path)
-        Note over TC,FS: reads Thumb::URI from each PNG in .thumbnails/;<br/>removes any thumbnail whose source path no longer exists
+        Note over TC,FS: reads Thumb::URI from each PNG in .thumbnails/
+        Note over TC,FS: removes any thumbnail whose source path no longer exists
     end
 
     API-->>Frontend: {deleted: N, paths: [...], errors: [...]}
@@ -237,7 +238,7 @@ flowchart TD
     E -->|other| J["generate placeholder PNG\nwith label + extension"]
 
     G -->|success| H["PIL: open temp frame\n→ centre on canvas\n→ _save_thumbnail_png"]
-    G -->|failure\n(CalledProcessError,\nTimeoutExpired,\nFileNotFoundError,\nOSError)| I["generate placeholder PNG"]
+    G -->|"failure<br/>(CalledProcessError,<br/>TimeoutExpired,<br/>FileNotFoundError,<br/>OSError)"| I["generate placeholder PNG"]
 
     H --> K["return ThumbnailResult\nwas_generated=True"]
     F --> K
