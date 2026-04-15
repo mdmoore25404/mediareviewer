@@ -70,10 +70,13 @@ function formatSize(sizeBytes: number): string {
   return `${(mib / 1024).toFixed(1)} GiB`;
 }
 
-function relPath(fullPath: string, basePath: string): string {
-  if (!basePath) return fullPath;
-  const prefix = basePath.endsWith("/") ? basePath : `${basePath}/`;
-  return fullPath.startsWith(prefix) ? fullPath.slice(prefix.length) : fullPath;
+const SPEED_STEPS = [0.5, 1, 1.5, 2, 4] as const;
+type SpeedStep = (typeof SPEED_STEPS)[number];
+
+function stepSpeed(current: number, direction: 1 | -1): SpeedStep {
+  const idx = SPEED_STEPS.indexOf(current as SpeedStep);
+  const clamped = Math.max(0, Math.min(SPEED_STEPS.length - 1, (idx === -1 ? 0 : idx) + direction));
+  return SPEED_STEPS[clamped] ?? 1;
 }
 
 function themeIcon(mode: ThemeMode): string {
@@ -285,6 +288,48 @@ function App(): ReactElement {
       if (event.key === "?") {
         setShowHelp((prev) => !prev);
         return;
+      }
+      // Video-only shortcuts
+      if (activeReviewItem.mediaType === "video") {
+        if (event.key === " ") {
+          event.preventDefault();
+          const vid = videoRef.current;
+          if (!vid) return;
+          if (vid.paused) void vid.play();
+          else vid.pause();
+          return;
+        }
+        if (event.key.toLowerCase() === "z") {
+          if (videoRef.current) videoRef.current.currentTime -= 5;
+          return;
+        }
+        if (event.key.toLowerCase() === "x") {
+          if (videoRef.current) videoRef.current.currentTime += 5;
+          return;
+        }
+        if (event.key === "[" || event.key.toLowerCase() === "q") {
+          setPlaybackRate((prev) => {
+            const next = stepSpeed(prev, -1);
+            sessionStorage.setItem("mediareviewer-playback-rate", String(next));
+            return next;
+          });
+          return;
+        }
+        if (event.key === "]" || event.key.toLowerCase() === "w") {
+          setPlaybackRate((prev) => {
+            const next = stepSpeed(prev, 1);
+            sessionStorage.setItem("mediareviewer-playback-rate", String(next));
+            return next;
+          });
+          return;
+        }
+        const speedKeys: Record<string, SpeedStep> = { "1": 0.5, "2": 1, "3": 1.5, "4": 2, "5": 4 };
+        const targetSpeed = speedKeys[event.key];
+        if (targetSpeed !== undefined) {
+          sessionStorage.setItem("mediareviewer-playback-rate", String(targetSpeed));
+          setPlaybackRate(targetSpeed);
+          return;
+        }
       }
     };
 
@@ -871,7 +916,7 @@ function App(): ReactElement {
                             {formatSize(item.sizeBytes)} · {new Date(item.modifiedAt).toLocaleString()}
                           </span>
                         </h3>
-                        <p className="small text-secondary mb-2 text-break">{relPath(item.path, selectedPath)}</p>
+
                         <div className="d-flex flex-wrap gap-2 mb-2">
                           {item.status.locked && <span className="badge text-bg-primary">locked</span>}
                           {item.status.trashed && <span className="badge text-bg-danger">trash</span>}
@@ -1058,6 +1103,19 @@ function App(): ReactElement {
                       <tr><td><kbd>Esc</kbd></td><td>Close panel / close review</td></tr>
                     </tbody>
                   </table>
+                  {activeReviewItem.mediaType === "video" && (
+                    <table className="review-help-table mt-2">
+                      <tbody>
+                        <tr><td colSpan={2} className="review-help-section">Video controls</td></tr>
+                        <tr><td><kbd>Space</kbd></td><td>Play / pause</td></tr>
+                        <tr><td><kbd>Z</kbd></td><td>Skip back 5 s</td></tr>
+                        <tr><td><kbd>X</kbd></td><td>Skip forward 5 s</td></tr>
+                        <tr><td><kbd>Q</kbd> / <kbd>[</kbd></td><td>Speed down</td></tr>
+                        <tr><td><kbd>W</kbd> / <kbd>]</kbd></td><td>Speed up</td></tr>
+                        <tr><td><kbd>1</kbd>–<kbd>5</kbd></td><td>Speed 0.5× / 1× / 1.5× / 2× / 4×</td></tr>
+                      </tbody>
+                    </table>
+                  )}
                 </div>
               )}
 
@@ -1117,7 +1175,7 @@ function App(): ReactElement {
                   <button
                     type="button"
                     className="btn btn-sm btn-outline-light video-mini-btn"
-                    title="Skip back 5 seconds"
+                    title="Skip back 5 seconds (Z)"
                     aria-label="Skip back 5 seconds"
                     onClick={() => {
                       if (videoRef.current) videoRef.current.currentTime -= 5;
@@ -1125,12 +1183,13 @@ function App(): ReactElement {
                   >
                     <i className="fa-solid fa-backward-step" aria-hidden="true" />
                     <span className="video-mini-label">−5s</span>
+                    {showVideoControls && <kbd className="video-mini-kbd" aria-hidden="true">Z</kbd>}
                   </button>
 
                   <button
                     type="button"
                     className="btn btn-sm btn-outline-light video-mini-btn video-mini-playpause"
-                    title={isVideoPaused ? "Play" : "Pause"}
+                    title={`${isVideoPaused ? "Play" : "Pause"} (Space)`}
                     aria-label={isVideoPaused ? "Play" : "Pause"}
                     onClick={() => {
                       const vid = videoRef.current;
@@ -1143,12 +1202,13 @@ function App(): ReactElement {
                       className={`fa-solid ${isVideoPaused ? "fa-play" : "fa-pause"}`}
                       aria-hidden="true"
                     />
+                    {showVideoControls && <kbd className="video-mini-kbd" aria-hidden="true">Spc</kbd>}
                   </button>
 
                   <button
                     type="button"
                     className="btn btn-sm btn-outline-light video-mini-btn"
-                    title="Skip forward 5 seconds"
+                    title="Skip forward 5 seconds (X)"
                     aria-label="Skip forward 5 seconds"
                     onClick={() => {
                       if (videoRef.current) videoRef.current.currentTime += 5;
@@ -1156,6 +1216,7 @@ function App(): ReactElement {
                   >
                     <i className="fa-solid fa-forward-step" aria-hidden="true" />
                     <span className="video-mini-label">+5s</span>
+                    {showVideoControls && <kbd className="video-mini-kbd" aria-hidden="true">X</kbd>}
                   </button>
 
                   <button
@@ -1172,7 +1233,25 @@ function App(): ReactElement {
                   </button>
 
                   <div className="video-mini-speed">
-                    {([0.5, 1, 1.5, 2, 4] as const).map((rate) => (
+                    {showVideoControls && (
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-outline-light video-mini-btn"
+                        title="Speed down (Q / [)"
+                        aria-label="Speed down"
+                        onClick={() => {
+                          setPlaybackRate((prev) => {
+                            const next = stepSpeed(prev, -1);
+                            sessionStorage.setItem("mediareviewer-playback-rate", String(next));
+                            return next;
+                          });
+                        }}
+                      >
+                        <i className="fa-solid fa-gauge-simple-low" aria-hidden="true" />
+                        <kbd className="video-mini-kbd" aria-hidden="true">Q</kbd>
+                      </button>
+                    )}
+                    {SPEED_STEPS.map((rate, i) => (
                       <button
                         key={rate}
                         type="button"
@@ -1183,9 +1262,27 @@ function App(): ReactElement {
                           setPlaybackRate(rate);
                         }}
                       >
-                        {rate}×
+                        {rate}×{showVideoControls && <kbd className="video-mini-kbd" aria-hidden="true">{i + 1}</kbd>}
                       </button>
                     ))}
+                    {showVideoControls && (
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-outline-light video-mini-btn"
+                        title="Speed up (W / ])"
+                        aria-label="Speed up"
+                        onClick={() => {
+                          setPlaybackRate((prev) => {
+                            const next = stepSpeed(prev, 1);
+                            sessionStorage.setItem("mediareviewer-playback-rate", String(next));
+                            return next;
+                          });
+                        }}
+                      >
+                        <i className="fa-solid fa-gauge-simple-high" aria-hidden="true" />
+                        <kbd className="video-mini-kbd" aria-hidden="true">W</kbd>
+                      </button>
+                    )}
                   </div>
                 </div>
               )}
@@ -1209,9 +1306,7 @@ function App(): ReactElement {
                       {formatSize(activeReviewItem.sizeBytes)} · {new Date(activeReviewItem.modifiedAt).toLocaleString()}
                     </span>
                   </h2>
-                  <p className="review-path mb-0" title={activeReviewItem.path}>
-                    {relPath(activeReviewItem.path, selectedPath)}
-                  </p>
+
                 </div>
                 <div className="d-flex flex-wrap gap-2">
                   <button
