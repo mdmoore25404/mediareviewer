@@ -24,6 +24,7 @@ from mediareviewer_api.services.review_config_store import ReviewConfigStore
 from mediareviewer_api.services.thumbnail_cache import ThumbnailCacheService
 
 api_blueprint = Blueprint("api", __name__, url_prefix="/api")
+logger = logging.getLogger(__name__)
 
 
 @api_blueprint.get("/health")
@@ -475,7 +476,6 @@ def _prune_thumbnails_best_effort(
     Intended to be run in a daemon thread so the NDJSON stream can close
     immediately after all deletions are complete.
     """
-    logger = logging.getLogger(__name__)
     try:
         thumbnail_cache.prune_orphaned_thumbnails(review_path)
     except Exception as exc:  # noqa: BLE001

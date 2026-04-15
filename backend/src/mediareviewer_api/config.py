@@ -40,20 +40,20 @@ def _default_thumbnail_cache_directory(state_directory: Path) -> Path:
 def _load_server_settings_from_yaml(
     state_directory: Path,
     config_file_name: str,
-) -> tuple[str, int, tuple[str, ...]]:
-    """Load backend listen host and port from ~/.mediareviewer/config.yaml."""
+) -> tuple[str, int, tuple[str, ...], str]:
+    """Load backend listen host, port, trusted hosts, and log level from config.yaml."""
 
     config_file_path = state_directory / config_file_name
     if not config_file_path.exists():
-        return ("127.0.0.1", 5000, ())
+        return ("127.0.0.1", 5000, (), "INFO")
 
     raw_data = yaml.safe_load(config_file_path.read_text(encoding="utf-8"))
     if not isinstance(raw_data, dict):
-        return ("127.0.0.1", 5000, ())
+        return ("127.0.0.1", 5000, (), "INFO")
 
     raw_server = raw_data.get("server", {})
     if not isinstance(raw_server, dict):
-        return ("127.0.0.1", 5000, ())
+        return ("127.0.0.1", 5000, (), "INFO")
 
     host = str(raw_server.get("backend_host", "127.0.0.1"))
     port = int(raw_server.get("backend_port", 5000))
@@ -62,7 +62,8 @@ def _load_server_settings_from_yaml(
         for item in raw_server.get("trusted_hosts", [])
         if isinstance(item, str) and item
     )
-    return (host, port, trusted_hosts)
+    log_level = str(raw_server.get("log_level", "INFO")).upper()
+    return (host, port, trusted_hosts, log_level)
 
 
 @dataclass(frozen=True, slots=True)
@@ -76,6 +77,7 @@ class AppSettings:
         default_factory=lambda: DEFAULT_HIDDEN_PICKER_PATHS,
     )
     trusted_hosts: tuple[str, ...] = ()
+    log_level: str = "INFO"
     deletion_workers: int = 2
     video_preload_mb: int = 50
     auto_thumbnail_on_add: bool = True
@@ -97,7 +99,7 @@ class AppSettings:
         state_directory = Path(
             os.getenv("MEDIAREVIEWER_STATE_DIR", str(Path.home() / ".mediareviewer")),
         ).expanduser()
-        yaml_host, yaml_port, yaml_trusted_hosts = _load_server_settings_from_yaml(
+        yaml_host, yaml_port, yaml_trusted_hosts, yaml_log_level = _load_server_settings_from_yaml(
             state_directory,
             "config.yaml",
         )
@@ -107,6 +109,7 @@ class AppSettings:
             state_directory=state_directory,
             hidden_picker_paths=_parse_hidden_paths(os.getenv("MEDIAREVIEWER_HIDDEN_PATHS")),
             trusted_hosts=yaml_trusted_hosts,
+            log_level=os.getenv("MEDIAREVIEWER_LOG_LEVEL", yaml_log_level).upper(),
             deletion_workers=int(os.getenv("MEDIAREVIEWER_DELETION_WORKERS", "2")),
             video_preload_mb=int(os.getenv("MEDIAREVIEWER_VIDEO_PRELOAD_MB", "50")),
             auto_thumbnail_on_add=os.getenv(

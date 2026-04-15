@@ -1,7 +1,9 @@
 """Application factory and local entry point for the Media Reviewer API."""
 
+import logging
 import os
 import threading
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 from flask import Flask, send_from_directory
@@ -14,11 +16,23 @@ from mediareviewer_api.services.media_scanner import MediaScanner
 from mediareviewer_api.services.review_config_store import ReviewConfigStore
 from mediareviewer_api.services.thumbnail_cache import ThumbnailCacheService
 
+logger = logging.getLogger(__name__)
+
 
 def create_app(settings: AppSettings | None = None) -> Flask:
     """Create and configure the Flask application."""
 
     resolved_settings = settings or AppSettings.from_env()
+
+    _configure_logging(
+        log_level=resolved_settings.log_level,
+        log_file=resolved_settings.state_directory / "mediareviewer.log",
+    )
+    logger.info(
+        "Starting mediareviewer_api (log_level=%s, state_dir=%s)",
+        resolved_settings.log_level,
+        resolved_settings.state_directory,
+    )
 
     # Optional: serve a pre-built React frontend from the same process.
     # Set MEDIAREVIEWER_STATIC_DIR to the Vite build output directory.
@@ -66,6 +80,42 @@ def create_app(settings: AppSettings | None = None) -> Flask:
             return send_from_directory(str(static_dir), "index.html")
 
     return app
+
+
+def _configure_logging(log_level: str, log_file: Path) -> None:
+    """Configure stream and rotating-file handlers on the mediareviewer_api logger.
+
+    Uses the ``mediareviewer_api`` package-level logger so that all sub-module
+    loggers (``mediareviewer_api.api``, ``mediareviewer_api.services.*``, etc.)
+    inherit the level and handlers without polluting the root logger.
+
+    The log file is written to *log_file* (default:
+    ``~/.mediareviewer/mediareviewer.log``) with rotation at 10 MB, keeping
+    three backup files.  Set ``MEDIAREVIEWER_LOG_LEVEL=DEBUG`` (or
+    ``server.log_level: DEBUG`` in config.yaml) to enable verbose output.
+    """
+    pkg_logger = logging.getLogger("mediareviewer_api")
+    if pkg_logger.handlers:  # already configured — avoid duplicate handlers on re-entry
+        return
+    level = getattr(logging, log_level.upper(), logging.INFO)
+    pkg_logger.setLevel(level)
+    pkg_logger.propagate = False
+
+    fmt = logging.Formatter("%(asctime)s %(levelname)-8s %(name)s: %(message)s")
+
+    stream_handler = logging.StreamHandler()
+    stream_handler.setFormatter(fmt)
+    pkg_logger.addHandler(stream_handler)
+
+    log_file.parent.mkdir(parents=True, exist_ok=True)
+    file_handler = RotatingFileHandler(
+        log_file,
+        maxBytes=10 * 1024 * 1024,
+        backupCount=3,
+        encoding="utf-8",
+    )
+    file_handler.setFormatter(fmt)
+    pkg_logger.addHandler(file_handler)
 
 
 def _start_startup_thumbnail_warmup(
