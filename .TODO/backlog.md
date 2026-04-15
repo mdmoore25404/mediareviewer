@@ -28,7 +28,7 @@
 
 - done: add theme mode toggle with light, dark, and auto(system) options.
 - planned: probe video duration and dimensions with ffprobe during scan; surface in grid card and review footer.
-- planned: auto-generate thumbnails in background when a new known path is added; configurable via `~/.mediareviewer/config.yaml` key `auto_thumbnail_on_add` (default `true`); runs as an async background thread using the same warm-thumbnail worker already used during scan.
+- done: auto-generate thumbnails in background when a new known path is added; configurable via `~/.mediareviewer/config.yaml` key `auto_thumbnail_on_add` (default `true`); runs as an async background thread using the same warm-thumbnail worker already used during scan.
 - planned: add per-status item counts to filter labels (e.g. "Unseen (47)") via a lightweight summary endpoint.
 - planned: batch actions — multi-select grid items and apply seen/trash/lock in one operation.
 - planned: review progress indicator — show remaining-unseen counter or thin progress bar in the review dialog header.

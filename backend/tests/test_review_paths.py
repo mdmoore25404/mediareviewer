@@ -1,6 +1,7 @@
 """Tests for persisted review path configuration endpoints."""
 
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 from flask.testing import FlaskClient
 
@@ -204,3 +205,62 @@ def test_remove_review_path_returns_404_for_unknown_path(tmp_path: Path) -> None
     assert response.status_code == 404
     payload = response.get_json()
     assert "error" in payload
+
+
+def test_add_review_path_starts_thumbnail_warm_thread(tmp_path: Path) -> None:
+    """Adding a path with auto_thumbnail_on_add=True must start the warm thread."""
+
+    state_directory = tmp_path / "state"
+    review_directory = tmp_path / "review"
+    review_directory.mkdir(parents=True)
+
+    settings = AppSettings(
+        state_directory=state_directory,
+        hidden_picker_paths=(),
+        deletion_workers=1,
+        auto_thumbnail_on_add=True,
+    )
+    app = create_app(settings)
+    client: FlaskClient = app.test_client()
+
+    mock_thread = MagicMock()
+    with patch("mediareviewer_api.api.threading.Thread", return_value=mock_thread) as mock_cls:
+        response = client.post(
+            "/api/review-paths",
+            json={"path": str(review_directory)},
+        )
+
+    assert response.status_code == 201
+    mock_cls.assert_called_once()
+    call_kwargs = mock_cls.call_args
+    assert call_kwargs.kwargs.get("daemon") is True
+    assert "thumb-warm" in (call_kwargs.kwargs.get("name") or "")
+    mock_thread.start.assert_called_once()
+
+
+def test_add_review_path_skips_warm_thread_when_disabled(tmp_path: Path) -> None:
+    """Adding a path with auto_thumbnail_on_add=False must not start the warm thread."""
+
+    state_directory = tmp_path / "state"
+    review_directory = tmp_path / "review"
+    review_directory.mkdir(parents=True)
+
+    settings = AppSettings(
+        state_directory=state_directory,
+        hidden_picker_paths=(),
+        deletion_workers=1,
+        auto_thumbnail_on_add=False,
+    )
+    app = create_app(settings)
+    client: FlaskClient = app.test_client()
+
+    with patch("mediareviewer_api.api.threading.Thread") as mock_cls:
+        response = client.post(
+            "/api/review-paths",
+            json={"path": str(review_directory)},
+        )
+
+    assert response.status_code == 201
+    # The scan-stream endpoint also uses threading.Thread; here we only POSTed
+    # a path, so the Thread constructor must not have been called at all.
+    mock_cls.assert_not_called()

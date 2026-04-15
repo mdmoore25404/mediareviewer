@@ -190,6 +190,24 @@ def add_review_path() -> Response:
         return jsonify({"error": "Path is hidden by picker policy."}), 403
 
     updated = config_store.add_known_path(review_path)
+
+    if settings.auto_thumbnail_on_add:
+        media_scanner = cast(
+            MediaScanner,
+            current_app.extensions["mediareviewer.media_scanner"],
+        )
+        thumbnail_cache = cast(
+            ThumbnailCacheService,
+            current_app.extensions["mediareviewer.thumbnail_cache"],
+        )
+        pregenerate_thread = threading.Thread(
+            target=_pregenerate_thumbnails,
+            args=(media_scanner, thumbnail_cache, review_path, 256),
+            daemon=True,
+            name=f"thumb-warm-{review_path.name}",
+        )
+        pregenerate_thread.start()
+
     payload = {
         "addedPath": str(review_path),
         "knownPaths": [str(path) for path in updated.known_paths],
