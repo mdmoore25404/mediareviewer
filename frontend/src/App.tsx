@@ -537,6 +537,7 @@ function App(): ReactElement {
           item.path === payload.path
             ? {
                 ...item,
+                path: payload.newPath ?? item.path,
                 status: payload.status,
               }
             : item,

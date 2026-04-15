@@ -67,6 +67,11 @@ export interface MediaActionResponse {
   path: string;
   action: MediaAction;
   status: MediaStatus;
+  /** Present only for 'trash' and 'untrash' actions: the path where the file
+   *  now lives after being moved.  Use this to update item.path in the UI so
+   *  subsequent actions (untrash, empty-trash path matching) use the correct
+   *  current location. */
+  newPath?: string;
 }
 
 export interface EmptyTrashResponse {

@@ -88,6 +88,8 @@ def test_trash_succeeds_after_unlock(tmp_path: Path) -> None:
     assert trash_response.status_code == 200
     payload = trash_response.get_json()
     assert payload["status"] == {"locked": False, "trashed": True, "seen": True}
+    # newPath must point to the .trash/-resident location.
+    assert payload["newPath"] == str((review_directory / ".trash" / "clip001b.mp4").resolve())
     # File must be physically moved into the .trash/ sibling directory.
     assert not media_file.exists()
     assert (review_directory / ".trash" / "clip001b.mp4").exists()
@@ -126,6 +128,8 @@ def test_trash_implies_seen(tmp_path: Path) -> None:
     payload = response.get_json()
     assert payload["status"]["trashed"] is True
     assert payload["status"]["seen"] is True
+    # newPath must point to the .trash/-resident location.
+    assert payload["newPath"] == str((review_directory / ".trash" / "clip002.mp4").resolve())
     # File must be physically moved into the .trash/ sibling directory.
     assert not media_file.exists()
     assert (review_directory / ".trash" / "clip002.mp4").exists()
@@ -164,6 +168,8 @@ def test_untrash_action(tmp_path: Path) -> None:
     assert response.status_code == 200
     payload = response.get_json()
     assert payload["status"]["trashed"] is False
+    # newPath must point to the restored location (parent of .trash/).
+    assert payload["newPath"] == str((review_directory / "clip003.mp4").resolve())
     # File must be restored to the parent of .trash/.
     assert not trash_file.exists()
     assert (review_directory / "clip003.mp4").exists()

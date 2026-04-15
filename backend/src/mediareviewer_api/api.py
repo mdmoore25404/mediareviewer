@@ -461,7 +461,9 @@ def post_media_action() -> Response:
     except LockedItemError as exc:
         return jsonify({"error": str(exc)}), 409
 
+    # Compute the actual path of the file after the action (it may have moved).
     if action == "trash":
+        new_path: Path | None = media_path.parent / ".trash" / media_path.name
         review_path = next(
             (
                 path
@@ -472,8 +474,12 @@ def post_media_action() -> Response:
         )
         if review_path:
             thumbnail_cache.delete_thumbnail(media_path, review_path)
+    elif action == "untrash":
+        new_path = media_path.parent.parent / media_path.name
+    else:
+        new_path = None
 
-    payload = {
+    payload: dict[str, object] = {
         "path": str(media_path),
         "action": action,
         "status": {
@@ -482,6 +488,8 @@ def post_media_action() -> Response:
             "seen": status.seen,
         },
     }
+    if new_path is not None:
+        payload["newPath"] = str(new_path)
     return jsonify(payload)
 
 
