@@ -67,6 +67,11 @@ export interface MediaActionResponse {
   path: string;
   action: MediaAction;
   status: MediaStatus;
+  /** Present only for 'trash' and 'untrash' actions: the path where the file
+   *  now lives after being moved.  Use this to update item.path in the UI so
+   *  subsequent actions (untrash, empty-trash path matching) use the correct
+   *  current location. */
+  newPath?: string;
 }
 
 export interface EmptyTrashResponse {
@@ -110,6 +115,10 @@ export interface FolderFilesResponse {
 export interface MediaStreamDone {
   type: "done";
   count: number;
+  /** Path of the last item yielded; null when no items were found.
+   *  Pass this as the ``after`` query parameter on the next page request
+   *  to enable gap-free cursor-based pagination. */
+  lastPath: string | null;
 }
 
 export interface LogsResponse {

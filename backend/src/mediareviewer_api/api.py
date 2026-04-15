@@ -257,8 +257,11 @@ def stream_media_items() -> Response:
     Each line of the response body is a JSON object.  Item lines have the same
     shape as a single element from the ``items`` array that the old polling
     endpoint returned.  The final line has the shape
-    ``{"type": "done", "count": N}`` to let the client confirm how many items
-    were actually streamed.
+    ``{"type": "done", "count": N, "lastPath": "<path>|null"}`` where
+    ``lastPath`` is the filesystem path of the last item yielded (or ``null``
+    when no items were found).  Clients should pass ``lastPath`` back as the
+    ``after`` query parameter on the next page request to enable gap-free
+    cursor-based pagination that is safe across concurrent reviews.
     """
 
     config_store = cast(
@@ -286,6 +289,18 @@ def stream_media_items() -> Response:
     if offset < 0:
         return jsonify({"error": "Query parameter 'offset' must be >= 0."}), 400
 
+    raw_after = request.args.get("after", default=None, type=str)
+    after_path: Path | None = None
+    if raw_after:
+        after_candidate = Path(raw_after).expanduser().resolve()
+        # Safety: after_path must lie inside the requested review path so
+        # a crafted cursor cannot reach outside the user's review scope.
+        try:
+            after_candidate.relative_to(Path(raw_path).expanduser().resolve())
+            after_path = after_candidate
+        except ValueError:
+            return jsonify({"error": "Query parameter 'after' must be inside 'path'."}), 400
+
     raw_status_filter = request.args.get("statusFilter", default="all", type=str)
     valid_status_filters = {"all", "unseen", "seen", "locked", "trashed"}
     if raw_status_filter not in valid_status_filters:
@@ -304,17 +319,20 @@ def stream_media_items() -> Response:
     @stream_with_context
     def generate() -> Response:
         count = 0
+        last_path: str | None = None
         for item in media_scanner.scan_stream(
             root_path=requested_path,
             limit=limit,
             offset=offset,
             status_filter=status_filter,
+            after_path=after_path,
         ):
             item_payload = item.to_payload()
             item_payload["thumbnailUrl"] = _build_media_thumbnail_url(item.path, 256)
             yield json.dumps(item_payload) + "\n"
             count += 1
-        yield json.dumps({"type": "done", "count": count}) + "\n"
+            last_path = item.path
+        yield json.dumps({"type": "done", "count": count, "lastPath": last_path}) + "\n"
 
     # Start a low-priority daemon thread that warms the thumbnail cache for
     # every item in the path (not just the current page) so future scrolls
@@ -443,7 +461,9 @@ def post_media_action() -> Response:
     except LockedItemError as exc:
         return jsonify({"error": str(exc)}), 409
 
+    # Compute the actual path of the file after the action (it may have moved).
     if action == "trash":
+        new_path: Path | None = media_path.parent / ".trash" / media_path.name
         review_path = next(
             (
                 path
@@ -454,8 +474,12 @@ def post_media_action() -> Response:
         )
         if review_path:
             thumbnail_cache.delete_thumbnail(media_path, review_path)
+    elif action == "untrash":
+        new_path = media_path.parent.parent / media_path.name
+    else:
+        new_path = None
 
-    payload = {
+    payload: dict[str, object] = {
         "path": str(media_path),
         "action": action,
         "status": {
@@ -464,6 +488,8 @@ def post_media_action() -> Response:
             "seen": status.seen,
         },
     }
+    if new_path is not None:
+        payload["newPath"] = str(new_path)
     return jsonify(payload)
 
 
@@ -487,18 +513,19 @@ def _delete_trashed_file(
     review_path: Path,
     thumbnail_cache: ThumbnailCacheService,
 ) -> dict[str, object]:
-    """Delete *candidate* and its companion files; return a result event dict.
+    """Delete *candidate* from a ``.trash/`` directory; return a result event dict.
 
     Designed to run safely in a worker thread: no Flask context access, only
     filesystem and the thumbnail-cache service (which is also filesystem-only).
+    After removing the file, attempts to clean up an empty ``.trash/`` directory.
     """
     try:
-        for companion_suffix in (".lock", ".trash", ".seen"):
-            companion = candidate.with_suffix(f"{candidate.suffix}{companion_suffix}")
-            if companion.exists():
-                companion.unlink()
         thumbnail_cache.delete_thumbnail(candidate, review_path)
         candidate.unlink()
+        try:
+            candidate.parent.rmdir()  # remove .trash/ dir when now empty
+        except OSError:
+            pass  # not empty or other error — leave the directory in place
         return {"type": "deleted", "path": str(candidate)}
     except OSError as exc:
         return {"type": "error", "path": str(candidate), "message": exc.strerror}
@@ -552,26 +579,17 @@ def post_empty_trash() -> Response:
                 if not review_path.is_dir():
                     continue
 
-                # Phase 1 — scan and emit "deleting" events for each candidate.
+                # Phase 1 — scan .trash/ subdirectories and emit "deleting" events.
                 candidates: list[Path] = []
                 for candidate in sorted(review_path.rglob("*")):
                     if not candidate.is_file():
                         continue
-                    trash_marker = candidate.with_suffix(
-                        f"{candidate.suffix}.trash"
-                    )
-                    if not trash_marker.exists():
-                        continue
-                    lock_marker = candidate.with_suffix(
-                        f"{candidate.suffix}.lock"
-                    )
-                    if lock_marker.exists():
-                        yield json.dumps(
-                            {"type": "skipped", "path": str(candidate), "reason": "locked"}
-                        ) + "\n"
+                    if candidate.parent.name != ".trash":
                         continue
                     candidates.append(candidate)
-                    yield json.dumps({"type": "deleting", "path": str(candidate)}) + "\n"
+                    yield json.dumps(
+                        {"type": "deleting", "path": str(candidate)}
+                    ) + "\n"
 
                 # Phase 2 — delete in parallel and stream results as they finish.
                 with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:

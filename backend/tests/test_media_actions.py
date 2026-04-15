@@ -49,7 +49,9 @@ def test_trash_rejected_when_locked(tmp_path: Path) -> None:
     assert "locked" in payload["error"].lower()
     # Lock file must still exist — no state mutation on rejection
     assert media_file.with_suffix(".mp4.lock").exists()
-    assert not media_file.with_suffix(".mp4.trash").exists()
+    # File must not have been moved to .trash/
+    assert media_file.exists()
+    assert not (review_directory / ".trash" / "clip001.mp4").exists()
 
 
 def test_trash_succeeds_after_unlock(tmp_path: Path) -> None:
@@ -86,7 +88,11 @@ def test_trash_succeeds_after_unlock(tmp_path: Path) -> None:
     assert trash_response.status_code == 200
     payload = trash_response.get_json()
     assert payload["status"] == {"locked": False, "trashed": True, "seen": True}
-    assert media_file.with_suffix(".mp4.trash").exists()
+    # newPath must point to the .trash/-resident location.
+    assert payload["newPath"] == str((review_directory / ".trash" / "clip001b.mp4").resolve())
+    # File must be physically moved into the .trash/ sibling directory.
+    assert not media_file.exists()
+    assert (review_directory / ".trash" / "clip001b.mp4").exists()
     assert not media_file.with_suffix(".mp4.lock").exists()
 
 
@@ -122,17 +128,23 @@ def test_trash_implies_seen(tmp_path: Path) -> None:
     payload = response.get_json()
     assert payload["status"]["trashed"] is True
     assert payload["status"]["seen"] is True
+    # newPath must point to the .trash/-resident location.
+    assert payload["newPath"] == str((review_directory / ".trash" / "clip002.mp4").resolve())
+    # File must be physically moved into the .trash/ sibling directory.
+    assert not media_file.exists()
+    assert (review_directory / ".trash" / "clip002.mp4").exists()
 
 
 def test_untrash_action(tmp_path: Path) -> None:
-    """Untrash action should remove the .trash companion file."""
+    """Untrash action should move the file back from the .trash/ directory."""
 
     state_directory = tmp_path / "state"
     review_directory = tmp_path / "review"
     review_directory.mkdir(parents=True)
-    media_file = review_directory / "clip003.mp4"
-    media_file.write_bytes(b"video")
-    media_file.with_suffix(".mp4.trash").write_text("", encoding="utf-8")
+    trash_dir = review_directory / ".trash"
+    trash_dir.mkdir()
+    trash_file = trash_dir / "clip003.mp4"
+    trash_file.write_bytes(b"video")
 
     state_directory.mkdir(parents=True)
     (state_directory / "config.yaml").write_text(
@@ -150,13 +162,17 @@ def test_untrash_action(tmp_path: Path) -> None:
 
     response = client.post(
         "/api/media-actions",
-        json={"path": str(media_file.resolve()), "action": "untrash"},
+        json={"path": str(trash_file.resolve()), "action": "untrash"},
     )
 
     assert response.status_code == 200
     payload = response.get_json()
     assert payload["status"]["trashed"] is False
-    assert not media_file.with_suffix(".mp4.trash").exists()
+    # newPath must point to the restored location (parent of .trash/).
+    assert payload["newPath"] == str((review_directory / "clip003.mp4").resolve())
+    # File must be restored to the parent of .trash/.
+    assert not trash_file.exists()
+    assert (review_directory / "clip003.mp4").exists()
 
 
 def test_unlock_action(tmp_path: Path) -> None:
