@@ -3,8 +3,10 @@
 from pathlib import Path
 
 from mediareviewer_api.services.media_scanner import (
+    MediaScanner,
     _find_dcim_subtrees,
     _iter_candidates,
+    _iter_trash_candidates,
     _sorted_walk,
     is_dcim_path,
 )
@@ -209,4 +211,112 @@ def test_iter_candidates_non_dcim_files_not_duplicated(tmp_path: Path) -> None:
     names = [p.name for p in result]
     assert names.count("notes.txt") == 1
     assert names.count("IMG_001.JPG") == 1
+
+
+# ---------------------------------------------------------------------------
+# _iter_trash_candidates — .trash/ directory walk
+# ---------------------------------------------------------------------------
+
+
+def test_iter_trash_candidates_yields_files_in_trash_dirs(tmp_path: Path) -> None:
+    """_iter_trash_candidates must yield files inside .trash/ subdirectories."""
+    trash_dir = tmp_path / ".trash"
+    trash_dir.mkdir()
+    (trash_dir / "IMG_001.JPG").write_bytes(b"x")
+    (trash_dir / "IMG_002.JPG").write_bytes(b"x")
+    (tmp_path / "keep.jpg").write_bytes(b"x")
+
+    result = list(_iter_trash_candidates(tmp_path))
+    names = [p.name for p in result]
+    assert "IMG_001.JPG" in names
+    assert "IMG_002.JPG" in names
+    assert "keep.jpg" not in names
+
+
+def test_iter_trash_candidates_skips_non_trash_dirs(tmp_path: Path) -> None:
+    """_iter_trash_candidates must not yield files from non-.trash directories."""
+    (tmp_path / "photos").mkdir()
+    (tmp_path / "photos" / "visible.jpg").write_bytes(b"x")
+    trash_dir = tmp_path / ".trash"
+    trash_dir.mkdir()
+    (trash_dir / "hidden.jpg").write_bytes(b"x")
+
+    result = list(_iter_trash_candidates(tmp_path))
+    names = [p.name for p in result]
+    assert names == ["hidden.jpg"]
+
+
+def test_iter_trash_candidates_handles_nested_trash_dirs(tmp_path: Path) -> None:
+    """_iter_trash_candidates yields files from .trash/ at multiple nesting levels."""
+    sub = tmp_path / "DCIM" / "100MEDIA"
+    sub.mkdir(parents=True)
+    (sub / "IMG_001.JPG").write_bytes(b"x")
+    top_trash = tmp_path / ".trash"
+    top_trash.mkdir()
+    (top_trash / "old.jpg").write_bytes(b"x")
+    sub_trash = sub / ".trash"
+    sub_trash.mkdir()
+    (sub_trash / "sub.jpg").write_bytes(b"x")
+
+    result = list(_iter_trash_candidates(tmp_path))
+    names = sorted(p.name for p in result)
+    assert names == ["old.jpg", "sub.jpg"]
+    # Normal files must not appear.
+    assert "IMG_001.JPG" not in names
+
+
+def test_iter_trash_candidates_yields_sorted_order(tmp_path: Path) -> None:
+    """Files inside a single .trash/ directory are yielded in lexicographic order."""
+    trash_dir = tmp_path / ".trash"
+    trash_dir.mkdir()
+    for name in ["z.jpg", "a.jpg", "m.jpg"]:
+        (trash_dir / name).write_bytes(b"x")
+
+    result = [p.name for p in _iter_trash_candidates(tmp_path)]
+    assert result == ["a.jpg", "m.jpg", "z.jpg"]
+
+
+# ---------------------------------------------------------------------------
+# MediaScanner — trashed status filter
+# ---------------------------------------------------------------------------
+
+
+def test_scan_stream_trashed_filter_returns_items_in_trash_dir(tmp_path: Path) -> None:
+    """scan_stream with status_filter='trashed' yields files inside .trash/ dirs."""
+    trash_dir = tmp_path / ".trash"
+    trash_dir.mkdir()
+    (trash_dir / "trashed.jpg").write_bytes(b"x")
+    (tmp_path / "normal.jpg").write_bytes(b"x")
+
+    scanner = MediaScanner()
+    items = list(scanner.scan_stream(tmp_path, limit=100, status_filter="trashed"))
+    names = [i.name for i in items]
+    assert names == ["trashed.jpg"]
+    assert all(i.status.trashed for i in items)
+
+
+def test_scan_stream_trashed_items_excluded_from_all_filter(tmp_path: Path) -> None:
+    """scan_stream with status_filter='all' must NOT yield files from .trash/ dirs."""
+    trash_dir = tmp_path / ".trash"
+    trash_dir.mkdir()
+    (trash_dir / "trashed.jpg").write_bytes(b"x")
+    (tmp_path / "normal.jpg").write_bytes(b"x")
+
+    scanner = MediaScanner()
+    items = list(scanner.scan_stream(tmp_path, limit=100, status_filter="all"))
+    names = [i.name for i in items]
+    assert "trashed.jpg" not in names
+    assert "normal.jpg" in names
+
+
+def test_scan_stream_trashed_items_excluded_from_unseen_filter(tmp_path: Path) -> None:
+    """scan_stream with status_filter='unseen' must not yield files from .trash/ dirs."""
+    trash_dir = tmp_path / ".trash"
+    trash_dir.mkdir()
+    (trash_dir / "trashed.jpg").write_bytes(b"x")
+
+    scanner = MediaScanner()
+    items = list(scanner.scan_stream(tmp_path, limit=100, status_filter="unseen"))
+    names = [i.name for i in items]
+    assert "trashed.jpg" not in names
 

@@ -439,14 +439,15 @@ def test_stream_status_filter_locked(tmp_path: Path) -> None:
 
 
 def test_stream_status_filter_trashed(tmp_path: Path) -> None:
-    """statusFilter=trashed must return only items with a .trash companion file."""
+    """statusFilter=trashed must return only items inside a .trash/ directory."""
 
     import json
 
     client, review_directory = _make_stream_client(tmp_path)
 
-    Image.new("RGB", (8, 8)).save(review_directory / "trashed.jpg")
-    (review_directory / "trashed.jpg.trash").write_text("", encoding="utf-8")
+    trash_dir = review_directory / ".trash"
+    trash_dir.mkdir()
+    Image.new("RGB", (8, 8)).save(trash_dir / "trashed.jpg")
     Image.new("RGB", (8, 8)).save(review_directory / "kept.jpg")
 
     response = client.get(

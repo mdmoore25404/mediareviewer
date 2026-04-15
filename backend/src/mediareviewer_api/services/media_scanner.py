@@ -38,7 +38,7 @@ VIDEO_EXTENSIONS: frozenset[str] = frozenset(
     },
 )
 
-COMPANION_SUFFIXES: frozenset[str] = frozenset({".lock", ".trash", ".seen"})
+COMPANION_SUFFIXES: frozenset[str] = frozenset({".lock", ".seen"})
 
 # DCF (Design rule for Camera File system) subdirectory names are three decimal
 # digits followed by one to five alphanumeric/underscore characters, e.g.
@@ -153,14 +153,37 @@ def _sorted_walk(root: Path) -> Iterator[Path]:
 
     Uses ``os.walk`` instead of ``sorted(root.rglob('*'))`` so that results
     start arriving before the entire directory tree has been traversed.
-    Hidden directories (names beginning with ``'.'``) are pruned before
-    descending so they are never entered at all.
+    Hidden directories (names beginning with ``'.'``, including ``.trash/``)
+    are pruned before descending so they are never entered at all.
     """
     for dirpath, dirnames, filenames in os.walk(str(root)):
         # Prune hidden dirs in-place; os.walk respects this before recursing.
         dirnames[:] = sorted(d for d in dirnames if not d.startswith("."))
         for filename in sorted(filenames):
             yield Path(dirpath) / filename
+
+
+def _iter_trash_candidates(root: Path) -> Iterator[Path]:
+    """Yield media files found inside ``.trash/`` subdirectories under *root*.
+
+    Descends the tree visiting only non-hidden directories (to find ``.trash/``
+    siblings at any nesting level) and then yields every file directly inside
+    each ``.trash/`` directory found.  The ``.trash/`` directories themselves
+    are not recursed into further, matching the flat layout written by
+    :class:`CompanionActionService`.
+    """
+    for dirpath, dirnames, filenames in os.walk(str(root)):
+        p = Path(dirpath)
+        if p.name == ".trash":
+            for filename in sorted(filenames):
+                yield p / filename
+            dirnames[:] = []  # .trash/ has no meaningful subdirs
+        else:
+            # Descend into non-hidden dirs and .trash/ siblings only.
+            dirnames[:] = sorted(
+                d for d in dirnames
+                if not d.startswith(".") or d == ".trash"
+            )
 
 
 def _find_dcim_subtrees(root: Path) -> list[Path]:
@@ -287,19 +310,30 @@ class MediaScanner:
         - ``"unseen"`` — items without a ``.seen`` companion file.
         - ``"seen"``   — items with a ``.seen`` companion file.
         - ``"locked"`` — items with a ``.lock`` companion file.
-        - ``"trashed"``— items with a ``.trash`` companion file.
+        - ``"trashed"``— items physically located inside a ``.trash/`` sibling
+          directory.  These are yielded via :func:`_iter_trash_candidates`
+          which explicitly descends into ``.trash/`` subdirectories that the
+          normal walk skips.
 
-        Hidden directories (names starting with ``'.'``) and companion files are
-        skipped silently and do **not** count against *offset* or *limit*.
+        Hidden directories (names starting with ``'.'``, including ``.trash/``)
+        and companion files are skipped silently and do **not** count against
+        *offset* or *limit* during normal (non-trashed) scans.
         """
 
         normalized_root = root_path.expanduser().resolve()
         skipped = 0
         count = 0
-        for candidate in _iter_candidates(normalized_root):
+        # Trashed items live in .trash/ subdirs, which the normal walker skips.
+        if status_filter == "trashed":
+            candidate_iter: Iterator[Path] = _iter_trash_candidates(normalized_root)
+        else:
+            candidate_iter = _iter_candidates(normalized_root)
+        for candidate in candidate_iter:
             if not candidate.is_file():
                 continue
-            if self._is_in_hidden_directory(candidate, normalized_root):
+            if status_filter != "trashed" and self._is_in_hidden_directory(
+                candidate, normalized_root
+            ):
                 continue
             if self._is_companion_file(candidate):
                 continue
@@ -381,17 +415,17 @@ class MediaScanner:
         """Return True if *file_path* satisfies the requested status filter."""
         if status_filter == "all":
             return True
+        is_trashed = file_path.parent.name == ".trash"
         lock_exists = file_path.with_suffix(f"{file_path.suffix}.lock").exists()
-        trash_exists = file_path.with_suffix(f"{file_path.suffix}.trash").exists()
         seen_exists = file_path.with_suffix(f"{file_path.suffix}.seen").exists()
         if status_filter == "unseen":
-            return not seen_exists
+            return not seen_exists and not is_trashed
         if status_filter == "seen":
-            return seen_exists
+            return seen_exists and not is_trashed
         if status_filter == "locked":
             return lock_exists
         if status_filter == "trashed":
-            return trash_exists
+            return is_trashed
         return True  # unreachable but satisfies exhaustiveness
 
     def _detect_media_type(self, file_path: Path) -> str | None:
@@ -425,7 +459,7 @@ class MediaScanner:
             created_at=self._to_iso8601(file_stat.st_ctime),
             status=MediaStatus(
                 locked=file_path.with_suffix(f"{file_path.suffix}.lock").exists(),
-                trashed=file_path.with_suffix(f"{file_path.suffix}.trash").exists(),
+                trashed=file_path.parent.name == ".trash",
                 seen=file_path.with_suffix(f"{file_path.suffix}.seen").exists(),
             ),
             metadata=self._probe_metadata(file_path, media_type),

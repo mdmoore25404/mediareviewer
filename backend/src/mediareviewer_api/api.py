@@ -487,18 +487,19 @@ def _delete_trashed_file(
     review_path: Path,
     thumbnail_cache: ThumbnailCacheService,
 ) -> dict[str, object]:
-    """Delete *candidate* and its companion files; return a result event dict.
+    """Delete *candidate* from a ``.trash/`` directory; return a result event dict.
 
     Designed to run safely in a worker thread: no Flask context access, only
     filesystem and the thumbnail-cache service (which is also filesystem-only).
+    After removing the file, attempts to clean up an empty ``.trash/`` directory.
     """
     try:
-        for companion_suffix in (".lock", ".trash", ".seen"):
-            companion = candidate.with_suffix(f"{candidate.suffix}{companion_suffix}")
-            if companion.exists():
-                companion.unlink()
         thumbnail_cache.delete_thumbnail(candidate, review_path)
         candidate.unlink()
+        try:
+            candidate.parent.rmdir()  # remove .trash/ dir when now empty
+        except OSError:
+            pass  # not empty or other error — leave the directory in place
         return {"type": "deleted", "path": str(candidate)}
     except OSError as exc:
         return {"type": "error", "path": str(candidate), "message": exc.strerror}
@@ -552,26 +553,17 @@ def post_empty_trash() -> Response:
                 if not review_path.is_dir():
                     continue
 
-                # Phase 1 — scan and emit "deleting" events for each candidate.
+                # Phase 1 — scan .trash/ subdirectories and emit "deleting" events.
                 candidates: list[Path] = []
                 for candidate in sorted(review_path.rglob("*")):
                     if not candidate.is_file():
                         continue
-                    trash_marker = candidate.with_suffix(
-                        f"{candidate.suffix}.trash"
-                    )
-                    if not trash_marker.exists():
-                        continue
-                    lock_marker = candidate.with_suffix(
-                        f"{candidate.suffix}.lock"
-                    )
-                    if lock_marker.exists():
-                        yield json.dumps(
-                            {"type": "skipped", "path": str(candidate), "reason": "locked"}
-                        ) + "\n"
+                    if candidate.parent.name != ".trash":
                         continue
                     candidates.append(candidate)
-                    yield json.dumps({"type": "deleting", "path": str(candidate)}) + "\n"
+                    yield json.dumps(
+                        {"type": "deleting", "path": str(candidate)}
+                    ) + "\n"
 
                 # Phase 2 — delete in parallel and stream results as they finish.
                 with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:

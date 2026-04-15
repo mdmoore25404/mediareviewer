@@ -37,7 +37,7 @@ def _parse_ndjson(response: object) -> list[dict[str, object]]:
 
 
 def test_empty_trash_deletes_trashed_files(tmp_path: Path) -> None:
-    """Files with a .trash companion should be permanently deleted."""
+    """Files inside a .trash/ sibling directory should be permanently deleted."""
 
     review_directory = tmp_path / "review"
     review_directory.mkdir(parents=True)
@@ -45,10 +45,10 @@ def test_empty_trash_deletes_trashed_files(tmp_path: Path) -> None:
     keep_file = review_directory / "keep.jpg"
     keep_file.write_bytes(b"img")
 
-    trash_file = review_directory / "delete_me.jpg"
+    trash_dir = review_directory / ".trash"
+    trash_dir.mkdir()
+    trash_file = trash_dir / "delete_me.jpg"
     trash_file.write_bytes(b"img")
-    trash_file.with_suffix(".jpg.trash").write_text("", encoding="utf-8")
-    trash_file.with_suffix(".jpg.seen").write_text("", encoding="utf-8")
 
     client: FlaskClient = _make_client(tmp_path, review_directory)
     response = client.post(
@@ -67,20 +67,17 @@ def test_empty_trash_deletes_trashed_files(tmp_path: Path) -> None:
 
     assert keep_file.exists()
     assert not trash_file.exists()
-    assert not trash_file.with_suffix(".jpg.trash").exists()
-    assert not trash_file.with_suffix(".jpg.seen").exists()
 
 
-def test_empty_trash_skips_locked_files(tmp_path: Path) -> None:
-    """Files that are both trashed and locked must not be deleted."""
+def test_empty_trash_cleans_up_empty_trash_dir(tmp_path: Path) -> None:
+    """The .trash/ directory should be removed once all its files are deleted."""
 
     review_directory = tmp_path / "review"
     review_directory.mkdir(parents=True)
 
-    media_file = review_directory / "protected.mp4"
-    media_file.write_bytes(b"video")
-    media_file.with_suffix(".mp4.trash").write_text("", encoding="utf-8")
-    media_file.with_suffix(".mp4.lock").write_text("", encoding="utf-8")
+    trash_dir = review_directory / ".trash"
+    trash_dir.mkdir()
+    (trash_dir / "frame001.jpg").write_bytes(b"img")
 
     client: FlaskClient = _make_client(tmp_path, review_directory)
     response = client.post(
@@ -91,12 +88,44 @@ def test_empty_trash_skips_locked_files(tmp_path: Path) -> None:
     assert response.status_code == 200
     events = _parse_ndjson(response)
     done = next(e for e in events if e["type"] == "done")
-    skipped_events = [e for e in events if e["type"] == "skipped"]
 
-    assert done["deleted"] == 0
-    assert any(e["path"] == str(media_file.resolve()) for e in skipped_events)
-    assert media_file.exists()
-    assert media_file.with_suffix(".mp4.trash").exists()
+    assert done["deleted"] == 1
+    assert not trash_dir.exists()
+
+
+def test_empty_trash_handles_nested_trash_dirs(tmp_path: Path) -> None:
+    """Files in .trash/ directories at multiple nesting levels are all deleted."""
+
+    review_directory = tmp_path / "review"
+    sub_dir = review_directory / "DCIM" / "100MEDIA"
+    sub_dir.mkdir(parents=True)
+
+    # .trash/ at top level
+    top_trash = review_directory / ".trash"
+    top_trash.mkdir()
+    top_file = top_trash / "top.jpg"
+    top_file.write_bytes(b"img")
+
+    # .trash/ inside a subdirectory
+    sub_trash = sub_dir / ".trash"
+    sub_trash.mkdir()
+    sub_file = sub_trash / "sub.jpg"
+    sub_file.write_bytes(b"img")
+
+    client: FlaskClient = _make_client(tmp_path, review_directory)
+    response = client.post(
+        "/api/empty-trash",
+        json={"path": str(review_directory.resolve())},
+    )
+
+    assert response.status_code == 200
+    events = _parse_ndjson(response)
+    done = next(e for e in events if e["type"] == "done")
+
+    assert done["deleted"] == 2
+    assert done["errors"] == 0
+    assert not top_file.exists()
+    assert not sub_file.exists()
 
 
 def test_empty_trash_returns_zero_when_nothing_trashed(tmp_path: Path) -> None:

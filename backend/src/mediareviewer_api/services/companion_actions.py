@@ -18,28 +18,43 @@ class CompanionStatus:
 
 
 class CompanionActionService:
-    """Create or remove companion files for media review actions."""
+    """Create or remove companion files for media review actions.
+
+    Trash state is represented by physically moving the media file into a
+    ``.trash/`` sibling directory rather than a companion file.  This allows
+    rescans of the parent folder to skip trashed items entirely (hidden
+    directories are pruned by the scanner) and simplifies empty-trash to a
+    single directory deletion.
+
+    Lock and seen state continue to use ``.lock`` / ``.seen`` companion files
+    next to the media file at its current location.
+    """
 
     def apply(self, media_path: Path, action: str) -> CompanionStatus:
         """Apply a review action and return the resulting companion status."""
 
         lock_path = media_path.with_suffix(f"{media_path.suffix}.lock")
-        trash_path = media_path.with_suffix(f"{media_path.suffix}.trash")
         seen_path = media_path.with_suffix(f"{media_path.suffix}.seen")
 
         if action == "lock":
             self._touch(lock_path)
             self._touch(seen_path)
-            self._remove_if_exists(trash_path)
         elif action == "unlock":
             self._remove_if_exists(lock_path)
         elif action == "trash":
             if lock_path.exists():
                 raise LockedItemError("Cannot trash a locked item. Unlock it first.")
-            self._touch(trash_path)
-            self._touch(seen_path)
+            trash_dir = media_path.parent / ".trash"
+            trash_dir.mkdir(exist_ok=True)
+            media_path.rename(trash_dir / media_path.name)
+            # Remove any seen companion that may exist at the original location.
+            self._remove_if_exists(seen_path)
+            return CompanionStatus(locked=False, trashed=True, seen=True)
         elif action == "untrash":
-            self._remove_if_exists(trash_path)
+            # media_path is the file inside the .trash/ subdirectory.
+            dest = media_path.parent.parent / media_path.name
+            media_path.rename(dest)
+            return CompanionStatus(locked=False, trashed=False, seen=False)
         elif action == "seen":
             self._touch(seen_path)
         elif action == "unseen":
@@ -49,7 +64,7 @@ class CompanionActionService:
 
         return CompanionStatus(
             locked=lock_path.exists(),
-            trashed=trash_path.exists(),
+            trashed=media_path.parent.name == ".trash",
             seen=seen_path.exists(),
         )
 
