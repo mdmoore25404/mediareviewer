@@ -43,6 +43,19 @@
 - done: compact landscape info row — file size and modified timestamp on the same line as the filename in a smaller font to give more vertical space to the media preview.
 - planned: expose `video_preload_mb` as a configurable setting via `GET/PATCH /api/settings` endpoint and a settings panel in the frontend UI; currently only configurable via YAML (`~/.mediareviewer/config.yaml`) or environment variable (`MEDIAREVIEWER_VIDEO_PRELOAD_MB`).
 
+## Planned (cont.)
+
+- done: DCIM-aware incremental scan walk — for paths that follow DCF/DCIM conventions
+  (``DCIM/NNNxxxxx/`` structure), filename order is equivalent to modified-date order, so
+  ``sorted(rglob("*"))`` can be replaced with an incremental ``os.walk``-based walk that yields
+  files immediately without materialising the full path list first.  This reduces first-item
+  latency for large SD-card scans and avoids peak memory proportional to total file count.
+  The optimised walk should also prune hidden directories before descending (instead of
+  filtering after discovery) and log when DCIM structure is detected.  Detect three forms:
+  (1) path itself is ``DCIM/`` with numbered subdirs, (2) path is a numbered DCIM subdir
+  inside a ``DCIM/`` parent, (3) path contains an immediate ``DCIM/`` child with numbered
+  subdirs.  Fall back to the existing ``sorted(rglob)`` path for non-DCIM roots.
+
 ## Stretch goals
 
 - stretch: AI-assisted media description on the fly — opt-in, non-blocking one-line AI tag summary in the review dialog and grid card.

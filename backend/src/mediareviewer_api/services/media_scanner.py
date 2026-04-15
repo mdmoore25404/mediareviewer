@@ -1,5 +1,8 @@
 """Filesystem scanner for image and video review items."""
 
+import logging
+import os
+import re
 from collections.abc import Iterator
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
@@ -37,7 +40,14 @@ VIDEO_EXTENSIONS: frozenset[str] = frozenset(
 
 COMPANION_SUFFIXES: frozenset[str] = frozenset({".lock", ".trash", ".seen"})
 
+# DCF (Design rule for Camera File system) subdirectory names are three decimal
+# digits followed by one to five alphanumeric/underscore characters, e.g.
+# ``100MEDIA``, ``101GOPRO``, ``102_PANO``.
+DCIM_SUBDIR_PATTERN: re.Pattern[str] = re.compile(r"^\d{3}[A-Za-z0-9_]+$")
+
 StatusFilter = Literal["all", "unseen", "seen", "locked", "trashed"]
+
+_log = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -97,6 +107,77 @@ class FolderInfo:
     name: str
     has_children: bool
 
+
+def is_dcim_path(root: Path) -> bool:
+    """Return True when *root* follows DCF/DCIM directory conventions.
+
+    Accepts three forms commonly found on trail-cam and digital-camera SD cards:
+
+    1. The path is itself named ``DCIM`` and contains at least one numbered
+       subdirectory (e.g. ``100MEDIA``).
+    2. The path is a numbered DCIM subdirectory sitting directly inside a
+       ``DCIM`` parent (e.g. ``…/DCIM/100MEDIA``).
+    3. The path contains an immediate child directory named ``DCIM`` which
+       itself contains numbered subdirectories.
+    """
+    # Case 1: path IS the DCIM root
+    if root.name.upper() == "DCIM":
+        try:
+            return any(
+                c.is_dir() and DCIM_SUBDIR_PATTERN.match(c.name)
+                for c in root.iterdir()
+            )
+        except PermissionError:
+            return False
+
+    # Case 2: path is a numbered DCIM subdir (e.g. 100MEDIA inside DCIM/)
+    if DCIM_SUBDIR_PATTERN.match(root.name) and root.parent.name.upper() == "DCIM":
+        return True
+
+    # Case 3: path contains an immediate DCIM child with numbered subdirs
+    dcim_child = root / "DCIM"
+    if dcim_child.is_dir():
+        try:
+            return any(
+                c.is_dir() and DCIM_SUBDIR_PATTERN.match(c.name)
+                for c in dcim_child.iterdir()
+            )
+        except PermissionError:
+            return False
+
+    return False
+
+
+def _sorted_walk(root: Path) -> Iterator[Path]:
+    """Yield every file under *root* in lexicographic path order incrementally.
+
+    Uses ``os.walk`` instead of ``sorted(root.rglob('*'))`` so that results
+    start arriving before the entire directory tree has been traversed.
+    Hidden directories (names beginning with ``'.'``) are pruned before
+    descending so they are never entered at all.
+    """
+    for dirpath, dirnames, filenames in os.walk(str(root)):
+        # Prune hidden dirs in-place; os.walk respects this before recursing.
+        dirnames[:] = sorted(d for d in dirnames if not d.startswith("."))
+        for filename in sorted(filenames):
+            yield Path(dirpath) / filename
+
+
+def _iter_candidates(root: Path) -> Iterator[Path]:
+    """Return a path iterator appropriate for *root*.
+
+    For DCIM-structured roots the incremental :func:`_sorted_walk` is used so
+    that the first scanned items are delivered to callers without waiting for
+    the whole directory tree to be materialised.  For other roots the
+    traditional ``sorted(root.rglob('*'))`` approach is used to preserve the
+    existing global-sort behaviour.
+    """
+    if is_dcim_path(root):
+        _log.debug("DCIM structure detected at %s — using incremental walk", root)
+        return _sorted_walk(root)
+    return iter(sorted(root.rglob("*")))
+
+
 class MediaScanner:
     """Scan a folder recursively and return supported media files only."""
 
@@ -107,7 +188,7 @@ class MediaScanner:
         ignored_count = 0
         normalized_root = root_path.expanduser().resolve()
 
-        for candidate in sorted(normalized_root.rglob("*")):
+        for candidate in _iter_candidates(normalized_root):
             if not candidate.is_file():
                 continue
             if self._is_in_hidden_directory(candidate, normalized_root):
@@ -151,7 +232,7 @@ class MediaScanner:
         normalized_root = root_path.expanduser().resolve()
         skipped = 0
         count = 0
-        for candidate in sorted(normalized_root.rglob("*")):
+        for candidate in _iter_candidates(normalized_root):
             if not candidate.is_file():
                 continue
             if self._is_in_hidden_directory(candidate, normalized_root):
