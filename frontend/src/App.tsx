@@ -70,7 +70,7 @@ function formatSize(sizeBytes: number): string {
   return `${(mib / 1024).toFixed(1)} GiB`;
 }
 
-const SPEED_STEPS = [0.5, 1, 1.5, 2, 4] as const;
+const SPEED_STEPS = [0.5, 1, 1.5, 2, 4, 8] as const;
 type SpeedStep = (typeof SPEED_STEPS)[number];
 
 function stepSpeed(current: number, direction: 1 | -1): SpeedStep {
@@ -113,10 +113,11 @@ function App(): ReactElement {
   const scanAbortRef = useRef<AbortController | null>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const lastZPressRef = useRef<number>(0);
   const [playbackRate, setPlaybackRate] = useState<number>(() => {
     const stored = sessionStorage.getItem("mediareviewer-playback-rate");
     const parsed = stored !== null ? Number(stored) : NaN;
-    return [0.5, 1, 1.5, 2, 4].includes(parsed) ? parsed : 1;
+    return [0.5, 1, 1.5, 2, 4, 8].includes(parsed) ? parsed : 1;
   });
   const [isVideoPaused, setIsVideoPaused] = useState<boolean>(false);
   const [isVideoMuted, setIsVideoMuted] = useState<boolean>(false);
@@ -224,6 +225,23 @@ function App(): ReactElement {
     setIsVideoPaused(false);
   }, [activeReviewPath]);
 
+  // Prime HTTP cache for the next item so it loads instantly when navigated to.
+  useEffect(() => {
+    if (!nextReviewItem) return undefined;
+    const link = document.createElement("link");
+    link.rel = "preload";
+    link.as = nextReviewItem.mediaType === "video" ? "video" : "image";
+    link.href = buildMediaFileUrl(nextReviewItem.path);
+    document.head.appendChild(link);
+    return () => {
+      if (document.head.contains(link)) {
+        document.head.removeChild(link);
+      }
+    };
+  // nextReviewItem.path uniquely identifies the resource to preload
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nextReviewItem?.path]);
+
   useEffect(() => {
     if (!activeReviewItem) {
       return undefined;
@@ -308,7 +326,17 @@ function App(): ReactElement {
           return;
         }
         if (event.key.toLowerCase() === "z") {
-          if (videoRef.current) videoRef.current.currentTime -= 5;
+          const now = Date.now();
+          if (videoRef.current) {
+            if (now - lastZPressRef.current < 400) {
+              // Double-Z: jump to start
+              videoRef.current.currentTime = 0;
+              lastZPressRef.current = 0;
+            } else {
+              videoRef.current.currentTime -= 5;
+              lastZPressRef.current = now;
+            }
+          }
           return;
         }
         if (event.key.toLowerCase() === "x") {
@@ -331,7 +359,7 @@ function App(): ReactElement {
           });
           return;
         }
-        const speedKeys: Record<string, SpeedStep> = { "1": 0.5, "2": 1, "3": 1.5, "4": 2, "5": 4 };
+        const speedKeys: Record<string, SpeedStep> = { "1": 0.5, "2": 1, "3": 1.5, "4": 2, "5": 4, "6": 8 };
         const targetSpeed = speedKeys[event.key];
         if (targetSpeed !== undefined) {
           sessionStorage.setItem("mediareviewer-playback-rate", String(targetSpeed));
@@ -1118,10 +1146,11 @@ function App(): ReactElement {
                         <tr><td colSpan={2} className="review-help-section">Video controls</td></tr>
                         <tr><td><kbd>Space</kbd></td><td>Play / pause</td></tr>
                         <tr><td><kbd>Z</kbd></td><td>Skip back 5 s</td></tr>
+                        <tr><td><kbd>Z</kbd><kbd>Z</kbd></td><td>Jump to start</td></tr>
                         <tr><td><kbd>X</kbd></td><td>Skip forward 5 s</td></tr>
                         <tr><td><kbd>Q</kbd> / <kbd>[</kbd></td><td>Speed down</td></tr>
                         <tr><td><kbd>W</kbd> / <kbd>]</kbd></td><td>Speed up</td></tr>
-                        <tr><td><kbd>1</kbd>–<kbd>5</kbd></td><td>Speed 0.5× / 1× / 1.5× / 2× / 4×</td></tr>
+                        <tr><td><kbd>1</kbd>–<kbd>6</kbd></td><td>Speed 0.5× / 1× / 1.5× / 2× / 4× / 8×</td></tr>
                       </tbody>
                     </table>
                   )}
@@ -1298,13 +1327,23 @@ function App(): ReactElement {
                 </div>
               )}
 
-              {/* Pre-fetch next item to eliminate navigation flicker */}
+              {/* Pre-fetch next item — hidden but fully rendered to avoid browser throttling */}
               {nextReviewItem && (
-                <div style={{ display: "none" }} aria-hidden="true">
+                <div
+                  style={{
+                    position: "absolute",
+                    width: 0,
+                    height: 0,
+                    overflow: "hidden",
+                    pointerEvents: "none",
+                    visibility: "hidden",
+                  }}
+                  aria-hidden="true"
+                >
                   {nextReviewItem.mediaType === "image" ? (
                     <img src={buildMediaFileUrl(nextReviewItem.path)} alt="" />
                   ) : (
-                    <video src={buildMediaFileUrl(nextReviewItem.path)} preload="auto" muted />
+                    <video src={buildMediaFileUrl(nextReviewItem.path)} preload="auto" muted autoPlay />
                   )}
                 </div>
               )}
