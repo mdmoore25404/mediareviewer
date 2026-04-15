@@ -58,4 +58,25 @@
 
 ## Stretch goals
 
-- stretch: AI-assisted media description on the fly — opt-in, non-blocking one-line AI tag summary in the review dialog and grid card.
+- stretch: reduce network-mount scan latency — the directory-discovery phase of `_find_dcim_subtrees`
+  (and `_sorted_walk` for non-DCIM trees) issues many sequential `readdir` calls over a network- or
+  USB-mounted filesystem, each with round-trip latency.  Observed: 1–18 s for phase 1 alone across six
+  paths on `/mnt/trailcam`.  Approaches to investigate, roughly easiest → hardest:
+  1. **Directory-structure cache** — after a successful scan/warmup, persist the list of discovered
+     DCIM subtrees per root path to `~/.mediareviewer/dir_cache.json` (keyed by resolved path, value =
+     list of subtree paths + mtime of the deepest `DCIM/` dir at scan time).  On the next startup, load
+     the cache and skip phase 1 entirely if the DCIM directory mtime is unchanged.  Invalidation: re-run
+     phase 1 whenever the cache entry is missing, the mtime changed, or the user manually triggers a
+     rescan.
+  2. **Parallel phase-1 threads** — the warmup already spawns one thread per root; if phase 1 itself
+     were IO-bound and concurrent, spawning multiple `os.walk` workers inside phase 1 (one per top-level
+     child directory) could halve wall-clock time.  Needs benchmarking — may not help for USB mounts
+     whose controller serialises requests.
+  3. **inotify / FSEvents watch** — register a persistent watch on each known root with
+     `watchdog` or the OS inotify API.  When the filesystem signals a directory creation event,
+     invalidate only the affected subtree rather than re-walking from the root.  Complex to implement
+     portably and requires the mount to support inotify (CIFS/NFS mounts often do not).
+  4. **Mount-level metadata** — query `stat` on the root path to detect network vs. local mounts
+     (e.g. `os.statvfs` or `/proc/mounts`) and apply a looser scan strategy (larger readdir batches,
+     skip phase 1 for very deep trees) when the mount is remote.
+

@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from flask.testing import FlaskClient
 
-from mediareviewer_api.app import _configure_logging, create_app
+from mediareviewer_api.app import _configure_logging, _deduplicate_paths, create_app
 from mediareviewer_api.config import AppSettings
 
 
@@ -172,6 +172,79 @@ def test_startup_warmup_skipped_when_no_known_paths(tmp_path: Path) -> None:
         create_app(settings)
 
     mock_cls.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# _deduplicate_paths — redundant descendant removal
+# ---------------------------------------------------------------------------
+
+
+def test_deduplicate_paths_removes_child_when_parent_present(tmp_path: Path) -> None:
+    """A path that is a descendant of another known path should be removed."""
+    parent = tmp_path / "card"
+    child = tmp_path / "card" / "DCIM" / "100MEDIA"
+    parent.mkdir(parents=True)
+    child.mkdir(parents=True)
+
+    result = _deduplicate_paths((parent, child))
+    assert result == (parent,)
+
+
+def test_deduplicate_paths_keeps_both_when_unrelated(tmp_path: Path) -> None:
+    """Two unrelated paths must both be preserved."""
+    a = tmp_path / "alpha"
+    b = tmp_path / "beta"
+    a.mkdir()
+    b.mkdir()
+
+    result = _deduplicate_paths((a, b))
+    assert set(result) == {a, b}
+
+
+def test_deduplicate_paths_preserves_order(tmp_path: Path) -> None:
+    """Non-redundant paths must be returned in their original order."""
+    paths = tuple((tmp_path / name) for name in ("c", "a", "b"))
+    for p in paths:
+        p.mkdir()
+
+    result = _deduplicate_paths(paths)
+    assert list(result) == list(paths)
+
+
+def test_deduplicate_paths_empty_input() -> None:
+    """Empty input must return an empty tuple."""
+    assert _deduplicate_paths(()) == ()
+
+
+def test_startup_warmup_deduplicates_nested_known_paths(tmp_path: Path) -> None:
+    """create_app must not spawn a warmup thread for a path covered by an ancestor."""
+    state_directory = tmp_path / "state"
+    state_directory.mkdir(parents=True)
+    parent = tmp_path / "card"
+    child = tmp_path / "card" / "DCIM" / "100MEDIA"
+    child.mkdir(parents=True)
+
+    (state_directory / "config.yaml").write_text(
+        "known_paths:\n"
+        f"  - {parent.resolve()}\n"
+        f"  - {child.resolve()}\n",
+        encoding="utf-8",
+    )
+
+    settings = AppSettings(
+        state_directory=state_directory,
+        hidden_picker_paths=(),
+        deletion_workers=1,
+        auto_thumbnail_on_add=True,
+    )
+
+    mock_thread = MagicMock()
+    with patch("mediareviewer_api.app.threading.Thread", return_value=mock_thread) as mock_cls:
+        create_app(settings)
+
+    # Only one thread for the parent; child should be deduplicated away.
+    assert mock_cls.call_count == 1
+    assert "card" in mock_cls.call_args.kwargs.get("name", "")
 
 
 # ---------------------------------------------------------------------------

@@ -118,6 +118,30 @@ def _configure_logging(log_level: str, log_file: Path) -> None:
     pkg_logger.addHandler(file_handler)
 
 
+def _deduplicate_paths(paths: tuple[Path, ...]) -> tuple[Path, ...]:
+    """Return *paths* with any path that is a descendant of another removed.
+
+    When a user registers both ``/mnt/card`` and
+    ``/mnt/card/DCIM/100MEDIA``, the nested path would be scanned twice:
+    once directly and once as a subtree discovered inside its ancestor.
+    This helper removes such redundant descendants so each piece of media
+    is only warmed once.
+
+    The input order of non-redundant paths is preserved.
+    """
+    resolved = [p.resolve() for p in paths]
+    kept: list[Path] = []
+    for i, candidate in enumerate(resolved):
+        if any(
+            j != i and (candidate == ancestor or ancestor in candidate.parents)
+            for j, ancestor in enumerate(resolved)
+        ):
+            logger.debug("skipping redundant warmup path %s (covered by ancestor)", candidate)
+            continue
+        kept.append(paths[i])
+    return tuple(kept)
+
+
 def _start_startup_thumbnail_warmup(
     config_store: ReviewConfigStore,
     media_scanner: MediaScanner,
@@ -129,9 +153,12 @@ def _start_startup_thumbnail_warmup(
     warmed even when no explicit scan has been triggered by the frontend yet.
     Already-cached and up-to-date thumbnails are skipped instantly via the
     mtime check inside ThumbnailCacheService.
+
+    Paths that are descendants of another known path are deduplicated before
+    spawning threads to avoid scanning the same files more than once.
     """
     config = config_store.load()
-    for known_path in config.known_paths:
+    for known_path in _deduplicate_paths(config.known_paths):
         t = threading.Thread(
             target=_pregenerate_thumbnails,
             args=(media_scanner, thumbnail_cache, known_path, 256),
