@@ -27,10 +27,12 @@ RUN npm run build
 # rather than building from source — arm64 pip installs complete in seconds.
 FROM python:3.12-slim AS runtime
 
-# ffmpeg is the only extra system package needed (video thumbnail generation).
-# Pillow ships manylinux/musllinux wheels that bundle their own libjpeg etc.
+# ffmpeg — video thumbnail generation via subprocess
+# gosu   — lightweight setuid helper (Debian equivalent of Alpine's su-exec)
+#           used by entrypoint.sh to drop from root to PUID/PGID
 RUN apt-get update && apt-get install -y --no-install-recommends \
         ffmpeg \
+        gosu \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -51,18 +53,28 @@ RUN pip install --no-cache-dir .
 # Copy pre-built frontend assets from stage 1
 COPY --from=frontend-builder /build/frontend/dist /app/static
 
-# Create state/data directory; run as a non-root user
-RUN useradd -r -u 1000 -U appuser && mkdir -p /data && chown appuser:appuser /data
+# Create state/data directory; entrypoint.sh will chown it at runtime
+# to match PUID/PGID, so we keep it root-owned here.
+RUN mkdir -p /data
+
+# Copy entrypoint script (runs as root, drops to PUID/PGID before exec)
+COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
 VOLUME ["/data"]
 
-USER appuser
+# Run as root so entrypoint.sh can chown /data and call su-exec
+# USER appuser  ← removed; privilege drop is handled by entrypoint.sh
 
 ENV MEDIAREVIEWER_HOST=0.0.0.0 \
     MEDIAREVIEWER_PORT=8080 \
     MEDIAREVIEWER_STATE_DIR=/data \
-    MEDIAREVIEWER_STATIC_DIR=/app/static
+    MEDIAREVIEWER_STATIC_DIR=/app/static \
+    PUID=1000 \
+    PGID=1000
 
 EXPOSE 8080
 
-# Entry-point installed to /usr/local/bin by pip install
+# entrypoint.sh chowns /data, drops to PUID:PGID, then execs mediareviewer-api
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 CMD ["mediareviewer-api"]

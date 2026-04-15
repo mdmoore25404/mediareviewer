@@ -47,6 +47,17 @@ services:
       MEDIAREVIEWER_PORT: "8080"
       MEDIAREVIEWER_STATE_DIR: "/data"
       MEDIAREVIEWER_STATIC_DIR: "/app/static"
+      # ── Permissions ───────────────────────────────────────────────────────
+      # Set PUID/PGID to the UID/GID that owns your /data bind-mount directory
+      # on the NAS host.  The entrypoint will chown /data and drop to this
+      # user before starting the app, preventing "permission denied" errors.
+      #
+      # To find the right values on the NAS:
+      #   stat -c "%u %g" /opt/mediareviewer/data
+      # or
+      #   id <your-nas-username>
+      PUID: "1000"   # ← replace with output of: stat -c "%u" /opt/mediareviewer/data
+      PGID: "1000"   # ← replace with output of: stat -c "%g" /opt/mediareviewer/data
       # Trusted hostnames or IPs that may send Host headers to the app.
       # Add your NAS hostname / local IP to avoid "400 Bad Host" errors.
       # MEDIAREVIEWER_TRUSTED_HOSTS: "nas,192.168.1.50,localhost"
