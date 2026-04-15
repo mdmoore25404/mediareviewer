@@ -432,6 +432,12 @@ body {
   border-color: #fff;
 }
 
+/* kbd hint inside the active (white bg) speed button must use dark ink */
+.video-mini-btn--active .video-mini-kbd {
+  color: rgba(0, 0, 0, 0.5);
+  border-color: rgba(0, 0, 0, 0.3);
+}
+
 /* Keyboard hint badges inside footer action buttons (Lock/Trash/Seen) */
 .review-action-kbd {
   margin-left: 0.45em;

@@ -250,6 +250,14 @@ function App(): ReactElement {
         showPreviousReviewItem();
         return;
       }
+      if (event.key.toLowerCase() === "e") {
+        showPreviousReviewItem();
+        return;
+      }
+      if (event.key.toLowerCase() === "r") {
+        showNextReviewItem();
+        return;
+      }
       if (event.key.toLowerCase() === "d" || event.key.toLowerCase() === "t") {
         if (activeReviewItem.status.trashed) {
           void handleMediaAction(activeReviewItem.path, "untrash");
@@ -1024,7 +1032,7 @@ function App(): ReactElement {
                   }}
                   disabled={activeReviewIndex === 0}
                 >
-                  Prev
+                  Prev{showVideoControls && <kbd className="review-action-kbd" aria-hidden="true">E</kbd>}
                 </button>
                 <p className="review-counter mb-0">
                   {activeReviewIndex + 1} / {displayedItems.length}
@@ -1058,7 +1066,7 @@ function App(): ReactElement {
                     activeReviewIndex === displayedItems.length - 1 && !hasMore && !isFetchingMore
                   }
                 >
-                  Next
+                  Next{showVideoControls && <kbd className="review-action-kbd" aria-hidden="true">R</kbd>}
                 </button>
                 <button
                   type="button"
@@ -1096,6 +1104,7 @@ function App(): ReactElement {
                   <table className="review-help-table">
                     <tbody>
                       <tr><td><kbd>→</kbd> / <kbd>←</kbd></td><td>Next / previous item</td></tr>
+                      <tr><td><kbd>R</kbd> / <kbd>E</kbd></td><td>Next / previous item (alt)</td></tr>
                       <tr><td><kbd>S</kbd></td><td>Mark seen (auto-advances) — toggle unseen</td></tr>
                       <tr><td><kbd>T</kbd> / <kbd>D</kbd></td><td>Trash (auto-advances) — toggle untrash</td></tr>
                       <tr><td><kbd>L</kbd> / <kbd>F</kbd></td><td>Lock (auto-advances) — toggle unlock</td></tr>
