@@ -1,0 +1,54 @@
+# Media Reviewer – NAS deployment compose file
+#
+# Usage on the NAS (ARM64):
+#   1. Copy this file to the NAS (e.g. /opt/mediareviewer/docker-compose.yml)
+#   2. Create /opt/mediareviewer/.env with your media paths (see MEDIA_DIR below)
+#   3. docker compose pull          # pulls ghcr.io image for arm64
+#   4. docker compose up -d         # starts the container
+#   5. Browse to http://<nas-ip>:8080
+#
+# Update to latest image:
+#   docker compose pull && docker compose up -d
+#
+# Image is published automatically to ghcr.io/mdmoore25404/mediareviewer on
+# every push to the main branch and on version tags.
+
+services:
+  mediareviewer:
+    image: ghcr.io/mdmoore25404/mediareviewer:latest
+    container_name: mediareviewer
+    platform: linux/arm64   # explicit; change to linux/amd64 on x86 NAS
+    ports:
+      # Expose on all interfaces so you can reach it from your LAN.
+      # Change 8080 if that port is already in use on the NAS.
+      - "8080:8080"
+    volumes:
+      # ── State / config directory ──────────────────────────────────────────
+      # The app reads config.yaml here and writes thumbnails + logs.
+      # Create this directory on the NAS before first run:
+      #   mkdir -p /opt/mediareviewer/data
+      - type: bind
+        source: /opt/mediareviewer/data
+        target: /data
+
+      # ── Media directories to review ───────────────────────────────────────
+      # Add one bind-mount per physical media location.
+      # Paths must match exactly what you will enter in the "Add path" UI.
+      # Read-write is required so the app can physically move files to
+      # the .trash/ subdirectory and delete them with Empty Trash.
+      #
+      # Example — SD card or USB drive mounted on the NAS:
+      - type: bind
+        source: /mnt/trailcam          # ← change to your NAS media path
+        target: /mnt/trailcam          # ← must match the path in config.yaml
+
+    environment:
+      MEDIAREVIEWER_HOST: "0.0.0.0"
+      MEDIAREVIEWER_PORT: "8080"
+      MEDIAREVIEWER_STATE_DIR: "/data"
+      MEDIAREVIEWER_STATIC_DIR: "/app/static"
+      # Trusted hostnames or IPs that may send Host headers to the app.
+      # Add your NAS hostname / local IP to avoid "400 Bad Host" errors.
+      # MEDIAREVIEWER_TRUSTED_HOSTS: "nas,192.168.1.50,localhost"
+
+    restart: unless-stopped

@@ -1,0 +1,83 @@
+name: Build & publish multi-arch Docker image
+
+# Trigger on every push to main and on semver release tags (v1.2.3).
+# The image is pushed to the GitHub Container Registry as:
+#   ghcr.io/mdmoore25404/mediareviewer:<tag>
+#   ghcr.io/mdmoore25404/mediareviewer:latest  (main branch and releases only)
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*.*.*"
+  pull_request:
+    branches:
+      - main
+    # On PRs we build but do NOT push (no write token needed / no cache pollution).
+
+permissions:
+  contents: read
+  packages: write  # needed to push to ghcr.io
+
+jobs:
+  build-and-push:
+    name: Build multi-arch image
+    runs-on: ubuntu-latest
+
+    steps:
+      # ── Checkout ─────────────────────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ── QEMU — enables cross-compilation of arm64 on the amd64 runner ───
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      # ── Buildx — multi-platform build driver ─────────────────────────────
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # ── Login ─────────────────────────────────────────────────────────────
+      - name: Log in to GitHub Container Registry
+        # Skip on pull_request events — we don't push from forks
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # ── Metadata (tags + labels) ──────────────────────────────────────────
+      # Produces tags like:
+      #   main branch  → ghcr.io/.../mediareviewer:main, :latest
+      #   v1.2.3 tag   → ghcr.io/.../mediareviewer:1.2.3, :latest
+      #   PR           → ghcr.io/.../mediareviewer:pr-42  (not pushed)
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/mdmoore25404/mediareviewer
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable={{is_default_branch}}
+          labels: |
+            org.opencontainers.image.source=https://github.com/mdmoore25404/mediareviewer
+            org.opencontainers.image.description=Media Reviewer — lightweight mobile-first image/video review tool
+
+      # ── Build (and push when not a PR) ────────────────────────────────────
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # Layer cache stored inside GitHub Actions cache — speeds up rebuilds
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

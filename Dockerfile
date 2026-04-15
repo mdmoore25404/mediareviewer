@@ -27,12 +27,13 @@ RUN npm run build
 # ── Stage 2: runtime image ────────────────────────────────────────────────
 FROM ubuntu:24.04 AS runtime
 
-# Install Python 3.12 (ships with Ubuntu 24.04) and Pillow system deps
+# Install Python 3.12 (ships with Ubuntu 24.04), Pillow deps, and ffmpeg
+# for video thumbnail generation via subprocess.
 RUN apt-get update && apt-get install -y --no-install-recommends \
         python3.12 \
         python3.12-venv \
         python3-pip \
-        # Pillow native deps
+        ffmpeg \
         libjpeg-turbo8 \
         libpng16-16 \
         libwebp7 \
@@ -48,11 +49,10 @@ RUN python3.12 -m venv /app/.venv \
     && /app/.venv/bin/pip install --no-cache-dir --upgrade pip \
     && /app/.venv/bin/pip install --no-cache-dir -r requirements.txt
 
-# Install the backend package (editable not available in production; use normal install)
+# Install the backend package from the source tree.
 COPY backend/src ./src
 COPY backend/pyproject.toml ./
-RUN /app/.venv/bin/pip install --no-cache-dir ./src \
-    || /app/.venv/bin/pip install --no-cache-dir -e .
+RUN /app/.venv/bin/pip install --no-cache-dir ./src
 
 # Copy pre-built frontend assets
 COPY --from=frontend-builder /build/frontend/dist /app/static
