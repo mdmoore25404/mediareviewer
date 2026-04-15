@@ -1075,7 +1075,7 @@ function App(): ReactElement {
                     setActiveReviewPath(null);
                   }}
                 >
-                  Close
+                  Close{showVideoControls && <kbd className="review-action-kbd" aria-hidden="true">Esc</kbd>}
                 </button>
                 {activeReviewItem.mediaType === "video" && (
                   <button
