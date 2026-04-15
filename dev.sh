@@ -172,6 +172,7 @@ start_backend() {
   nohup env \
     MEDIAREVIEWER_HOST="${BACKEND_HOST}" \
     MEDIAREVIEWER_PORT="${BACKEND_PORT}" \
+    MEDIAREVIEWER_LOG_LEVEL="DEBUG" \
     "${ROOT_DIR}/backend/.venv/bin/mediareviewer-api" >"${BACKEND_LOG}" 2>&1 &
   echo $! >"${BACKEND_PID_FILE}"
 
