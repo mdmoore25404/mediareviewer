@@ -6,6 +6,7 @@ import {
   buildMediaFileUrl,
   buildMediaThumbnailUrl,
   fetchHealth,
+  fetchLogs,
   fetchReviewPaths,
   removeReviewPath,
   streamEmptyTrash,
@@ -13,6 +14,7 @@ import {
 } from "./api/client";
 import type {
   HealthResponse,
+  LogsResponse,
   MediaAction,
   MediaItem,
   StatusFilter,
@@ -139,6 +141,9 @@ function App(): ReactElement {
   const [showHelp, setShowHelp] = useState<boolean>(false);
   const [trashLockedWarning, setTrashLockedWarning] = useState<TrashLockedWarning | null>(null);
   const [showSettings, setShowSettings] = useState<boolean>(false);
+  const [logs, setLogs] = useState<LogsResponse | null>(null);
+  const [logsLoading, setLogsLoading] = useState<boolean>(false);
+  const logsAbortRef = useRef<AbortController | null>(null);
   const [themeMode, cycleTheme] = useTheme();
 
   useEffect(() => {
@@ -575,6 +580,23 @@ function App(): ReactElement {
     }
   };
 
+  const loadLogs = (): void => {
+    logsAbortRef.current?.abort();
+    const controller = new AbortController();
+    logsAbortRef.current = controller;
+    setLogsLoading(true);
+    fetchLogs(controller.signal)
+      .then((result) => {
+        setLogs(result);
+      })
+      .catch(() => {
+        /* ignore abort errors */
+      })
+      .finally(() => {
+        setLogsLoading(false);
+      });
+  };
+
   const openReviewMode = (itemPath: string): void => {    setActiveReviewPath(itemPath);
   };
 
@@ -678,6 +700,7 @@ function App(): ReactElement {
             aria-label="Open settings"
             onClick={() => {
               setShowSettings(true);
+              loadLogs();
             }}
           >
             <i className="fa-solid fa-gear" aria-hidden="true" />
@@ -1436,7 +1459,10 @@ function App(): ReactElement {
             aria-label="Settings"
             data-testid="settings-dialog"
             onClick={(event) => {
-              if (event.target === event.currentTarget) setShowSettings(false);
+              if (event.target === event.currentTarget) {
+                logsAbortRef.current?.abort();
+                setShowSettings(false);
+              }
             }}
           >
             <div className="settings-dialog">
@@ -1450,6 +1476,7 @@ function App(): ReactElement {
                   className="btn-close"
                   aria-label="Close settings"
                   onClick={() => {
+                    logsAbortRef.current?.abort();
                     setShowSettings(false);
                   }}
                 />
@@ -1498,6 +1525,49 @@ function App(): ReactElement {
                     (set via <code>MEDIAREVIEWER_VIDEO_PRELOAD_MB</code>)
                   </span>
                 </p>
+              </div>
+
+              <div className="mb-0 mt-3">
+                <div className="d-flex align-items-center justify-content-between mb-2">
+                  <p className="settings-section-label mb-0">Server logs</p>
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-outline-secondary"
+                    aria-label="Refresh logs"
+                    disabled={logsLoading}
+                    onClick={loadLogs}
+                  >
+                    <i
+                      className={`fa-solid fa-rotate-right${
+                        logsLoading ? " fa-spin" : ""
+                      }`}
+                      aria-hidden="true"
+                    />
+                  </button>
+                </div>
+                {logs === null && !logsLoading && (
+                  <p className="small text-secondary mb-0">No logs loaded yet.</p>
+                )}
+                {logs !== null && !logs.available && (
+                  <p className="small text-secondary mb-0">
+                    Log file not yet created: <code>{logs.logFile}</code>
+                  </p>
+                )}
+                {logs !== null && logs.available && (
+                  <>
+                    <p className="small text-secondary mb-1">
+                      <code>{logs.logFile}</code>
+                    </p>
+                    <pre
+                      className="settings-log-viewer"
+                      data-testid="log-viewer"
+                    >
+                      {logs.lines.length === 0
+                        ? "(empty)"
+                        : logs.lines.join("\n")}
+                    </pre>
+                  </>
+                )}
               </div>
             </div>
           </div>

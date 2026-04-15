@@ -3,6 +3,7 @@ import type {
   FolderFilesResponse,
   FoldersResponse,
   HealthResponse,
+  LogsResponse,
   MediaAction,
   MediaActionResponse,
   MediaItem,
@@ -217,4 +218,13 @@ export async function fetchFolderFiles(
     signal,
   });
   return parseJsonResponse<FolderFilesResponse>(response);
+}
+
+/** Fetch the tail of the server log file. */
+export async function fetchLogs(signal: AbortSignal, lines = 200): Promise<LogsResponse> {
+  const response = await fetch(`/api/logs?lines=${lines}`, {
+    headers: { Accept: "application/json" },
+    signal,
+  });
+  return parseJsonResponse<LogsResponse>(response);
 }

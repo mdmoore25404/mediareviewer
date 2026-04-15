@@ -616,6 +616,44 @@ def post_empty_trash() -> Response:
     return Response(stream_with_context(_generate()), mimetype="application/x-ndjson")
 
 
+@api_blueprint.get("/logs")
+def get_logs() -> Response:
+    """Return the most recent log lines from the application log file.
+
+    Query parameters:
+    - ``lines`` (int, default 200, max 2000): number of tail lines to return.
+
+    Response JSON::
+
+        {
+            "lines": ["2026-04-14 12:00:00 INFO ...", ...],
+            "logFile": "/home/user/.mediareviewer/mediareviewer.log",
+            "available": true
+        }
+
+    When the log file does not exist yet ``available`` is false and ``lines`` is empty.
+    """
+    settings = cast(AppSettings, current_app.config["MEDIAREVIEWER_SETTINGS"])
+    raw_lines = request.args.get("lines", "200")
+    try:
+        n_lines = max(1, min(2000, int(raw_lines)))
+    except ValueError:
+        return jsonify({"error": "'lines' must be an integer."}), 400
+
+    log_file = settings.state_directory / "mediareviewer.log"
+    if not log_file.exists():
+        return jsonify({"lines": [], "logFile": str(log_file), "available": False})
+
+    try:
+        text = log_file.read_text(encoding="utf-8", errors="replace")
+    except OSError as exc:
+        return jsonify({"error": f"Could not read log file: {exc.strerror}"}), 500
+
+    all_lines = text.splitlines()
+    tail = all_lines[-n_lines:] if len(all_lines) > n_lines else all_lines
+    return jsonify({"lines": tail, "logFile": str(log_file), "available": True})
+
+
 def _build_media_thumbnail_url(media_path: str, size: int) -> str:
     """Build a relative thumbnail route for a media item payload."""
 

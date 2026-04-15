@@ -111,3 +111,9 @@ export interface MediaStreamDone {
   type: "done";
   count: number;
 }
+
+export interface LogsResponse {
+  lines: string[];
+  logFile: string;
+  available: boolean;
+}

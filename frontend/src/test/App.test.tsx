@@ -170,6 +170,18 @@ describe("App", () => {
         });
       }
 
+      if (url.startsWith("/api/logs")) {
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              lines: ["2026-04-14 INFO mediareviewer_api.app: Starting"],
+              logFile: "/tmp/mediareviewer/mediareviewer.log",
+              available: true,
+            }),
+        });
+      }
+
       return Promise.resolve({
         ok: false,
         json: () => Promise.resolve({ error: `Unhandled request: ${url}` }),
@@ -381,7 +393,7 @@ describe("App", () => {
 
     // Override stream to return one video item
     vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
-      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : (input as Request).url;
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
       if (url.endsWith("/api/health")) return Promise.resolve({ ok: true, json: () => Promise.resolve(healthResponse) });
       if (url.endsWith("/api/review-paths") && (!init?.method || init.method === "GET")) {
         return Promise.resolve({ ok: true, json: () => Promise.resolve(reviewPathsResponse) });
@@ -428,7 +440,7 @@ describe("App", () => {
     const user = userEvent.setup();
 
     vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
-      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : (input as Request).url;
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
       if (url.endsWith("/api/health")) return Promise.resolve({ ok: true, json: () => Promise.resolve(healthResponse) });
       if (url.endsWith("/api/review-paths") && (!init?.method || init.method === "GET")) {
         return Promise.resolve({ ok: true, json: () => Promise.resolve(reviewPathsResponse) });
@@ -463,4 +475,21 @@ describe("App", () => {
     expect(screen.getByRole("button", { name: "1×" })).toHaveAttribute("aria-pressed", "false");
     expect(sessionStorage.getItem("mediareviewer-playback-rate")).toBe("2");
   });
-});
+  it("opens settings and shows log lines in the log viewer", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Open settings" })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole("button", { name: "Open settings" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("log-viewer")).toBeInTheDocument();
+    });
+
+    expect(screen.getByTestId("log-viewer")).toHaveTextContent(
+      "2026-04-14 INFO mediareviewer_api.app: Starting",
+    );
+  });});
