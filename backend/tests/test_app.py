@@ -1,6 +1,7 @@
 """Tests for the initial Media Reviewer API scaffold."""
 
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import pytest
 from flask.testing import FlaskClient
@@ -88,3 +89,85 @@ def test_settings_load_trusted_hosts_from_yaml(
     settings = AppSettings.from_env()
 
     assert settings.trusted_hosts == ("somehost", "mediareviewer.local")
+
+
+def test_startup_warmup_spawns_thread_per_known_path(tmp_path: Path) -> None:
+    """create_app should start one warm thread per known path when auto_thumbnail_on_add=True."""
+
+    state_directory = tmp_path / "state"
+    state_directory.mkdir(parents=True)
+    path_a = tmp_path / "path_a"
+    path_b = tmp_path / "path_b"
+    path_a.mkdir()
+    path_b.mkdir()
+    (state_directory / "config.yaml").write_text(
+        "known_paths:\n"
+        f"  - {path_a.resolve()}\n"
+        f"  - {path_b.resolve()}\n",
+        encoding="utf-8",
+    )
+
+    settings = AppSettings(
+        state_directory=state_directory,
+        hidden_picker_paths=(),
+        deletion_workers=1,
+        auto_thumbnail_on_add=True,
+    )
+
+    mock_thread = MagicMock()
+    with patch("mediareviewer_api.app.threading.Thread", return_value=mock_thread) as mock_cls:
+        create_app(settings)
+
+    assert mock_cls.call_count == 2
+    started_names = [c.kwargs.get("name", "") for c in mock_cls.call_args_list]
+    assert any("path_a" in n for n in started_names)
+    assert any("path_b" in n for n in started_names)
+    assert mock_thread.start.call_count == 2
+
+
+def test_startup_warmup_skipped_when_disabled(tmp_path: Path) -> None:
+    """create_app must not start warm threads when auto_thumbnail_on_add=False."""
+
+    state_directory = tmp_path / "state"
+    state_directory.mkdir(parents=True)
+    known = tmp_path / "media"
+    known.mkdir()
+    (state_directory / "config.yaml").write_text(
+        f"known_paths:\n  - {known.resolve()}\n",
+        encoding="utf-8",
+    )
+
+    settings = AppSettings(
+        state_directory=state_directory,
+        hidden_picker_paths=(),
+        deletion_workers=1,
+        auto_thumbnail_on_add=False,
+    )
+
+    with patch("mediareviewer_api.app.threading.Thread") as mock_cls:
+        create_app(settings)
+
+    mock_cls.assert_not_called()
+
+
+def test_startup_warmup_skipped_when_no_known_paths(tmp_path: Path) -> None:
+    """create_app must not start any threads when no known paths are configured."""
+
+    state_directory = tmp_path / "state"
+    state_directory.mkdir(parents=True)
+    (state_directory / "config.yaml").write_text(
+        "known_paths: []\n",
+        encoding="utf-8",
+    )
+
+    settings = AppSettings(
+        state_directory=state_directory,
+        hidden_picker_paths=(),
+        deletion_workers=1,
+        auto_thumbnail_on_add=True,
+    )
+
+    with patch("mediareviewer_api.app.threading.Thread") as mock_cls:
+        create_app(settings)
+
+    mock_cls.assert_not_called()
