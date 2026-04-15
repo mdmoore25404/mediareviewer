@@ -9,7 +9,7 @@ This repository is the implementation workspace for Media Reviewer, a lightweigh
 - Keep implementation requests small enough to finish linting, testing, and documenting in one pass.
 - At the end of every implementation request, lint every Python, JavaScript, and TypeScript file that was created or modified in that request.
 - Add or update tests for every feature change, then iterate until the relevant linting and tests pass.
-- Commit each completed request with a clear git commit message and push to origin.
+- Commit each completed request with a clear git commit message. Automated pushes to feature branches are allowed. **Never push to `main` automatically — a human must issue that command.**
 - Record recurring lint mistakes or anti-patterns in `.TODO/lint-notes.md` so they are not repeated.
 - Update `docs/api/reference.md` whenever API routes, payloads, or error models change.
 - If a script or agent skill exists under `docs/` or `.github/instructions/` for generating architecture diagrams, re-run it after any structural change (new service, new route group, new data-flow step).
