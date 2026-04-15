@@ -80,3 +80,13 @@
      (e.g. `os.statvfs` or `/proc/mounts`) and apply a looser scan strategy (larger readdir batches,
      skip phase 1 for very deep trees) when the mount is remote.
 
+
+- planned: `immediate_delete` mode — add an `immediate_delete: false` boolean to `AppSettings` (env
+  `MEDIAREVIEWER_IMMEDIATE_DELETE`, YAML `server.immediate_delete`).  When `true`, the trash action
+  skips writing a `.trash` companion file and instead deletes the media file plus all of its companion
+  files (`.lock`, `.seen`, `.trash` if present) from disk immediately and synchronously.  The
+  `empty_trash` endpoint should become a no-op (returning a count of 0) when the mode is enabled since
+  there is nothing left to purge.  The frontend should indicate the active mode on the Trash button and
+  Empty Trash button (e.g. a tooltip or label) so the user is not surprised by irreversible behaviour.
+
+- stretch: AI-assisted media description on the fly — opt-in, non-blocking one-line AI tag summary in the review dialog and grid card.
