@@ -2,7 +2,12 @@
 
 from pathlib import Path
 
-from mediareviewer_api.services.media_scanner import _iter_candidates, _sorted_walk, is_dcim_path
+from mediareviewer_api.services.media_scanner import (
+    _find_dcim_subtrees,
+    _iter_candidates,
+    _sorted_walk,
+    is_dcim_path,
+)
 
 # ---------------------------------------------------------------------------
 # is_dcim_path — detection cases
@@ -104,7 +109,48 @@ def test_sorted_walk_yields_files_only(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# _iter_candidates — always-incremental walk
+# _find_dcim_subtrees — directory discovery
+# ---------------------------------------------------------------------------
+
+
+def test_find_dcim_subtrees_returns_dcf_numbered_dirs(tmp_path: Path) -> None:
+    """_find_dcim_subtrees returns DCF numbered subdirs sorted lexicographically."""
+    (tmp_path / "DCIM" / "102MEDIA").mkdir(parents=True)
+    (tmp_path / "DCIM" / "100MEDIA").mkdir(parents=True)
+
+    result = _find_dcim_subtrees(tmp_path)
+    assert [p.name for p in result] == ["100MEDIA", "102MEDIA"]
+
+
+def test_find_dcim_subtrees_returns_empty_for_non_dcim(tmp_path: Path) -> None:
+    """_find_dcim_subtrees returns an empty list when no DCIM structure exists."""
+    (tmp_path / "photos" / "2026").mkdir(parents=True)
+
+    assert _find_dcim_subtrees(tmp_path) == []
+
+
+def test_find_dcim_subtrees_deeply_nested(tmp_path: Path) -> None:
+    """_find_dcim_subtrees reaches DCIM subtrees buried under arbitrary intermediate dirs."""
+    nested = tmp_path / "Storage" / "CAM" / "DCIM" / "100MEDIA"
+    nested.mkdir(parents=True)
+
+    result = _find_dcim_subtrees(tmp_path)
+    assert len(result) == 1
+    assert result[0].name == "100MEDIA"
+
+
+def test_find_dcim_subtrees_skips_hidden_directories(tmp_path: Path) -> None:
+    """_find_dcim_subtrees must not descend into hidden directories."""
+    (tmp_path / ".Spotlight-V100" / "DCIM" / "100MEDIA").mkdir(parents=True)
+    (tmp_path / "visible" / "DCIM" / "100MEDIA").mkdir(parents=True)
+
+    result = _find_dcim_subtrees(tmp_path)
+    assert len(result) == 1
+    assert result[0] == tmp_path / "visible" / "DCIM" / "100MEDIA"
+
+
+# ---------------------------------------------------------------------------
+# _iter_candidates — two-phase DCIM-first scan
 # ---------------------------------------------------------------------------
 
 
@@ -128,10 +174,39 @@ def test_iter_candidates_yields_files_in_order_for_non_dcim(tmp_path: Path) -> N
 def test_iter_candidates_works_for_deeply_nested_dcim(tmp_path: Path) -> None:
     """_iter_candidates handles roots several levels above DCIM (real-world SD card layout)."""
     # Mirrors: /mnt/trailcam/NNNNdriveway/Generic MassStorage/GARDEPRO/DCIM/100MEDIA/
-    nested = tmp_path / "trailcam-root" / "Generic MassStorage" / "GARDEPRO" / "DCIM" / "100MEDIA"
+    nested = (
+        tmp_path / "trailcam-root" / "Generic MassStorage" / "GARDEPRO" / "DCIM" / "100MEDIA"
+    )
     nested.mkdir(parents=True)
     (nested / "IMG_001.JPG").write_bytes(b"x")
     (nested / "IMG_002.JPG").write_bytes(b"x")
 
     result = [p for p in _iter_candidates(tmp_path / "trailcam-root") if p.is_file()]
     assert [p.name for p in result] == ["IMG_001.JPG", "IMG_002.JPG"]
+
+
+def test_iter_candidates_yields_dcim_files_before_non_dcim_files(tmp_path: Path) -> None:
+    """_iter_candidates yields DCIM subtree files before files outside the DCIM tree."""
+    # Non-DCIM file alphabetically before the DCIM container dir name.
+    (tmp_path / "a_readme.txt").write_bytes(b"x")
+    dcim_dir = tmp_path / "storage" / "DCIM" / "100MEDIA"
+    dcim_dir.mkdir(parents=True)
+    (dcim_dir / "IMG_001.JPG").write_bytes(b"x")
+
+    result = [p for p in _iter_candidates(tmp_path) if p.is_file()]
+    names = [p.name for p in result]
+    assert names.index("IMG_001.JPG") < names.index("a_readme.txt")
+
+
+def test_iter_candidates_non_dcim_files_not_duplicated(tmp_path: Path) -> None:
+    """Files outside DCIM subtrees must appear exactly once in the output."""
+    (tmp_path / "notes.txt").write_bytes(b"x")
+    dcim_dir = tmp_path / "DCIM" / "100MEDIA"
+    dcim_dir.mkdir(parents=True)
+    (dcim_dir / "IMG_001.JPG").write_bytes(b"x")
+
+    result = [p for p in _iter_candidates(tmp_path) if p.is_file()]
+    names = [p.name for p in result]
+    assert names.count("notes.txt") == 1
+    assert names.count("IMG_001.JPG") == 1
+

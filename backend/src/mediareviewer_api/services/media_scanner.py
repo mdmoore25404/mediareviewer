@@ -163,28 +163,83 @@ def _sorted_walk(root: Path) -> Iterator[Path]:
             yield Path(dirpath) / filename
 
 
-def _iter_candidates(root: Path) -> Iterator[Path]:
-    """Yield media candidate paths under *root* incrementally in name order.
+def _find_dcim_subtrees(root: Path) -> list[Path]:
+    """Walk *root* visiting only directory entries to locate DCF subdirectories.
 
-    Uses :func:`_sorted_walk` (``os.walk`` with sorted subdirectory names)
-    for **all** roots so that the first results arrive while deeper
-    directories are still being read.  ``sorted(rglob('*'))`` materialises
-    the entire tree before yielding anything, which adds noticeable latency
-    when scanning large SD-card trees where the review root is several levels
-    above the innermost ``DCIM/NNNxxxxx/`` directories.
+    A DCF subdirectory is a directory whose name matches
+    :data:`DCIM_SUBDIR_PATTERN` (e.g. ``100MEDIA``, ``101GOPRO``) and whose
+    immediate parent is named ``DCIM`` (case-insensitive).  This is the
+    standard layout produced by digital cameras and trail cameras that follow
+    the *Design rule for Camera File system* (DCF / JEITA CP-3461).
 
-    The traversal order is lexicographically identical to ``sorted(rglob('*'))``
-    for nearly all real-world directory trees: since directory names form path
-    prefixes, sorting subdirectory names before descending and sorting
-    filenames within each directory produces the same global order as a single
-    sort over complete paths.
+    The walk is directory-only — file entries are ignored — so it completes
+    quickly even over large trees.  Hidden directories and their descendants
+    are skipped.  Recursion stops when a DCF numbered directory is found
+    because no further DCF nesting is expected inside those leaf directories.
 
-    When the root (or a subtree reachable from it) follows DCIM conventions,
-    the name-sorted traversal also matches modified-date order because cameras
-    assign sequential filenames at capture time.
+    Returns a list of :class:`~pathlib.Path` objects sorted lexicographically.
+    Returns an empty list when the tree contains no DCIM structure.
     """
-    _log.debug("scanning %s with incremental walk", root)
-    return _sorted_walk(root)
+    results: list[Path] = []
+    for dirpath, dirnames, _filenames in os.walk(str(root)):
+        p = Path(dirpath)
+        if DCIM_SUBDIR_PATTERN.match(p.name) and p.parent.name.upper() == "DCIM":
+            results.append(p)
+            dirnames[:] = []  # leaf — no further nesting expected
+            continue
+        dirnames[:] = sorted(d for d in dirnames if not d.startswith("."))
+    return sorted(results)
+
+
+def _iter_candidates(root: Path) -> Iterator[Path]:
+    """Yield media candidate paths under *root* using a two-phase strategy.
+
+    **Phase 1 — directory discovery**: walks *root* touching only directory
+    entries (no file ``stat`` calls) to locate all DCF numbered subdirectories
+    (e.g. ``DCIM/100MEDIA``).  This pass is fast because file entries are
+    intentionally ignored.
+
+    **Phase 2 — file scan**: if any DCF subtrees were found, their files are
+    yielded first via :func:`_sorted_walk` so that camera media is returned as
+    early as possible even when the scan root sits several levels above
+    the ``DCIM/`` directory.  After exhausting every DCIM subtree, a second
+    walk yields any remaining files that lie outside those subtrees.
+    When no DCF subtrees are found the tree is scanned directly with
+    :func:`_sorted_walk`.
+    """
+    _log.debug("scanning %s: phase 1 — locating DCIM subtrees", root)
+    dcim_subtrees = _find_dcim_subtrees(root)
+
+    if not dcim_subtrees:
+        _log.debug("%s: no DCIM subtrees found, plain incremental walk", root)
+        yield from _sorted_walk(root)
+        return
+
+    _log.debug(
+        "%s: %d DCIM subtree(s) found, scanning first",
+        root,
+        len(dcim_subtrees),
+    )
+    dcim_set: frozenset[Path] = frozenset(dcim_subtrees)
+
+    # Phase 2a — yield all files from each DCIM subtree first.
+    for subtree in dcim_subtrees:
+        yield from _sorted_walk(subtree)
+
+    # Phase 2b — yield any remaining files that live outside DCIM subtrees.
+    for dirpath, dirnames, filenames in os.walk(str(root)):
+        p = Path(dirpath)
+        # Prune hidden dirs and dirs already scanned in phase 2a so os.walk
+        # never descends into them again.
+        dirnames[:] = sorted(
+            d for d in dirnames
+            if not d.startswith(".") and (p / d) not in dcim_set
+        )
+        # Safety guard: skip if this dir is a DCIM subtree root or lies inside one.
+        if p in dcim_set or any(s in p.parents for s in dcim_set):
+            continue
+        for filename in sorted(filenames):
+            yield p / filename
 
 
 class MediaScanner:
