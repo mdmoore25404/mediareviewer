@@ -164,18 +164,27 @@ def _sorted_walk(root: Path) -> Iterator[Path]:
 
 
 def _iter_candidates(root: Path) -> Iterator[Path]:
-    """Return a path iterator appropriate for *root*.
+    """Yield media candidate paths under *root* incrementally in name order.
 
-    For DCIM-structured roots the incremental :func:`_sorted_walk` is used so
-    that the first scanned items are delivered to callers without waiting for
-    the whole directory tree to be materialised.  For other roots the
-    traditional ``sorted(root.rglob('*'))`` approach is used to preserve the
-    existing global-sort behaviour.
+    Uses :func:`_sorted_walk` (``os.walk`` with sorted subdirectory names)
+    for **all** roots so that the first results arrive while deeper
+    directories are still being read.  ``sorted(rglob('*'))`` materialises
+    the entire tree before yielding anything, which adds noticeable latency
+    when scanning large SD-card trees where the review root is several levels
+    above the innermost ``DCIM/NNNxxxxx/`` directories.
+
+    The traversal order is lexicographically identical to ``sorted(rglob('*'))``
+    for nearly all real-world directory trees: since directory names form path
+    prefixes, sorting subdirectory names before descending and sorting
+    filenames within each directory produces the same global order as a single
+    sort over complete paths.
+
+    When the root (or a subtree reachable from it) follows DCIM conventions,
+    the name-sorted traversal also matches modified-date order because cameras
+    assign sequential filenames at capture time.
     """
-    if is_dcim_path(root):
-        _log.debug("DCIM structure detected at %s — using incremental walk", root)
-        return _sorted_walk(root)
-    return iter(sorted(root.rglob("*")))
+    _log.debug("scanning %s with incremental walk", root)
+    return _sorted_walk(root)
 
 
 class MediaScanner:

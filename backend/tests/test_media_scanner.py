@@ -104,22 +104,34 @@ def test_sorted_walk_yields_files_only(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# _iter_candidates — routing logic
+# _iter_candidates — always-incremental walk
 # ---------------------------------------------------------------------------
 
 
-def test_iter_candidates_uses_incremental_walk_for_dcim(tmp_path: Path) -> None:
-    """_iter_candidates returns items from the incremental walk for DCIM roots."""
+def test_iter_candidates_yields_files_in_order_for_dcim(tmp_path: Path) -> None:
+    """_iter_candidates returns files in lexicographic order for DCIM roots."""
     expected = _build_tree(tmp_path / "card")
     result = [p for p in _iter_candidates(tmp_path / "card") if p.is_file()]
     assert result == expected
 
 
-def test_iter_candidates_falls_back_for_non_dcim(tmp_path: Path) -> None:
-    """_iter_candidates falls back to sorted rglob for non-DCIM directories."""
+def test_iter_candidates_yields_files_in_order_for_non_dcim(tmp_path: Path) -> None:
+    """_iter_candidates returns files in lexicographic order for non-DCIM directories."""
     (tmp_path / "photos").mkdir()
     (tmp_path / "photos" / "b.jpg").write_bytes(b"x")
     (tmp_path / "photos" / "a.jpg").write_bytes(b"x")
 
     result = [p for p in _iter_candidates(tmp_path) if p.is_file()]
     assert [p.name for p in result] == ["a.jpg", "b.jpg"]
+
+
+def test_iter_candidates_works_for_deeply_nested_dcim(tmp_path: Path) -> None:
+    """_iter_candidates handles roots several levels above DCIM (real-world SD card layout)."""
+    # Mirrors: /mnt/trailcam/NNNNdriveway/Generic MassStorage/GARDEPRO/DCIM/100MEDIA/
+    nested = tmp_path / "trailcam-root" / "Generic MassStorage" / "GARDEPRO" / "DCIM" / "100MEDIA"
+    nested.mkdir(parents=True)
+    (nested / "IMG_001.JPG").write_bytes(b"x")
+    (nested / "IMG_002.JPG").write_bytes(b"x")
+
+    result = [p for p in _iter_candidates(tmp_path / "trailcam-root") if p.is_file()]
+    assert [p.name for p in result] == ["IMG_001.JPG", "IMG_002.JPG"]
