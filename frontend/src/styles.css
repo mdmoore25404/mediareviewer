@@ -419,6 +419,33 @@ body {
   padding: 0 0.2em;
 }
 
+/* Active (selected) speed preset button — solid accent on the dark overlay */
+.video-mini-btn--active {
+  background-color: rgba(255, 255, 255, 0.9);
+  color: #111;
+  border-color: rgba(255, 255, 255, 0.9);
+}
+
+.video-mini-btn--active:hover {
+  background-color: #fff;
+  color: #111;
+  border-color: #fff;
+}
+
+/* Keyboard hint badges inside footer action buttons (Lock/Trash/Seen) */
+.review-action-kbd {
+  margin-left: 0.45em;
+  font-size: 0.68em;
+  font-weight: 400;
+  color: inherit;
+  opacity: 0.6;
+  background: transparent;
+  border: 1px solid currentColor;
+  border-radius: 0.2rem;
+  padding: 0 0.2em;
+  vertical-align: middle;
+}
+
 .review-footer-meta {
   font-size: 0.78rem;
   font-weight: 400;

@@ -1248,6 +1248,7 @@ function App(): ReactElement {
                         }}
                       >
                         <i className="fa-solid fa-gauge-simple-low" aria-hidden="true" />
+                        <span className="video-mini-label">Slower</span>
                         <kbd className="video-mini-kbd" aria-hidden="true">Q</kbd>
                       </button>
                     )}
@@ -1255,7 +1256,7 @@ function App(): ReactElement {
                       <button
                         key={rate}
                         type="button"
-                        className={`btn btn-sm video-mini-btn ${playbackRate === rate ? "btn-light" : "btn-outline-light"}`}
+                        className={`btn btn-sm video-mini-btn ${playbackRate === rate ? "video-mini-btn--active" : "btn-outline-light"}`}
                         aria-pressed={playbackRate === rate}
                         onClick={() => {
                           sessionStorage.setItem("mediareviewer-playback-rate", String(rate));
@@ -1280,6 +1281,7 @@ function App(): ReactElement {
                         }}
                       >
                         <i className="fa-solid fa-gauge-simple-high" aria-hidden="true" />
+                        <span className="video-mini-label">Faster</span>
                         <kbd className="video-mini-kbd" aria-hidden="true">W</kbd>
                       </button>
                     )}
@@ -1324,6 +1326,7 @@ function App(): ReactElement {
                     }}
                   >
                     {activeReviewItem.status.locked ? "Locked" : "Lock"}
+                    {showVideoControls && <kbd className="review-action-kbd" aria-hidden="true">F</kbd>}
                   </button>
                   <button
                     type="button"
@@ -1342,6 +1345,7 @@ function App(): ReactElement {
                     }}
                   >
                     {activeReviewItem.status.trashed ? "Trashed" : "Trash"}
+                    {showVideoControls && <kbd className="review-action-kbd" aria-hidden="true">D</kbd>}
                   </button>
                   <button
                     type="button"
@@ -1358,6 +1362,7 @@ function App(): ReactElement {
                     }}
                   >
                     {activeReviewItem.status.seen ? "Seen" : "Unseen"}
+                    {showVideoControls && <kbd className="review-action-kbd" aria-hidden="true">S</kbd>}
                   </button>
                 </div>
               </div>
