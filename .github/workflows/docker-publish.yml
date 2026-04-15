@@ -1,20 +1,17 @@
 name: Build & publish multi-arch Docker image
 
-# Trigger on every push to main and on semver release tags (v1.2.3).
+# Triggered manually (workflow_dispatch) or automatically on semver release
+# tags (e.g. v1.2.3).  Push-to-main does NOT trigger a build automatically.
+#
 # The image is pushed to the GitHub Container Registry as:
-#   ghcr.io/mdmoore25404/mediareviewer:<tag>
-#   ghcr.io/mdmoore25404/mediareviewer:latest  (main branch and releases only)
+#   ghcr.io/mdmoore25404/mediareviewer:<semver>  (e.g. 1.2.3)
+#   ghcr.io/mdmoore25404/mediareviewer:latest     (on every successful push)
 
 on:
+  workflow_dispatch:   # manual trigger from the GitHub Actions UI
   push:
-    branches:
-      - main
     tags:
-      - "v*.*.*"
-  pull_request:
-    branches:
-      - main
-    # On PRs we build but do NOT push (no write token needed / no cache pollution).
+      - "v*.*.*"       # semver release tags only (e.g. v1.2.3)
 
 permissions:
   contents: read
@@ -40,8 +37,6 @@ jobs:
 
       # ── Login ─────────────────────────────────────────────────────────────
       - name: Log in to GitHub Container Registry
-        # Skip on pull_request events — we don't push from forks
-        if: github.event_name != 'pull_request'
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -50,32 +45,29 @@ jobs:
 
       # ── Metadata (tags + labels) ──────────────────────────────────────────
       # Produces tags like:
-      #   main branch  → ghcr.io/.../mediareviewer:main, :latest
-      #   v1.2.3 tag   → ghcr.io/.../mediareviewer:1.2.3, :latest
-      #   PR           → ghcr.io/.../mediareviewer:pr-42  (not pushed)
+      #   v1.2.3 tag         → ghcr.io/.../mediareviewer:1.2.3, :1.2, :latest
+      #   workflow_dispatch  → ghcr.io/.../mediareviewer:latest
       - name: Extract Docker metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
           images: ghcr.io/mdmoore25404/mediareviewer
           tags: |
-            type=ref,event=branch
-            type=ref,event=pr
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
-            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=latest
           labels: |
             org.opencontainers.image.source=https://github.com/mdmoore25404/mediareviewer
             org.opencontainers.image.description=Media Reviewer — lightweight mobile-first image/video review tool
 
-      # ── Build (and push when not a PR) ────────────────────────────────────
+      # ── Build and push ─────────────────────────────────────────────────────
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
           context: .
           file: Dockerfile
           platforms: linux/amd64,linux/arm64
-          push: ${{ github.event_name != 'pull_request' }}
+          push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           # Layer cache stored inside GitHub Actions cache — speeds up rebuilds
