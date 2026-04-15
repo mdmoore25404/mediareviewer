@@ -77,7 +77,13 @@ export async function removeReviewPath(path: string): Promise<RemoveReviewPathRe
  *
  * Yields each {@link MediaItem} as soon as it is received.  The final value
  * is a {@link MediaStreamDone} sentinel with the total item count confirmed by
- * the server.  Throws on non-2xx responses or network errors.
+ * the server and the ``lastPath`` cursor needed for the next page.
+ * Throws on non-2xx responses or network errors.
+ *
+ * Pass the ``lastPath`` from the previous {@link MediaStreamDone} event as
+ * ``after`` to resume from the exact filesystem position where the previous
+ * page ended.  This cursor-based approach is safe across concurrent reviews
+ * because it tracks scan position, not filter-subset position.
  */
 export async function* streamMediaItems(
   path: string,
@@ -85,13 +91,18 @@ export async function* streamMediaItems(
   signal: AbortSignal,
   offset = 0,
   statusFilter: StatusFilter = "all",
+  after?: string,
 ): AsyncGenerator<MediaItem | MediaStreamDone> {
-  const search = new URLSearchParams({
+  const params: Record<string, string> = {
     path,
     limit: String(limit),
     offset: String(offset),
     statusFilter,
-  });
+  };
+  if (after !== undefined) {
+    params.after = after;
+  }
+  const search = new URLSearchParams(params);
   const response = await fetch(`/api/media-items/stream?${search.toString()}`, {
     headers: { Accept: "application/x-ndjson" },
     signal,

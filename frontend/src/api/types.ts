@@ -110,6 +110,10 @@ export interface FolderFilesResponse {
 export interface MediaStreamDone {
   type: "done";
   count: number;
+  /** Path of the last item yielded; null when no items were found.
+   *  Pass this as the ``after`` query parameter on the next page request
+   *  to enable gap-free cursor-based pagination. */
+  lastPath: string | null;
 }
 
 export interface LogsResponse {

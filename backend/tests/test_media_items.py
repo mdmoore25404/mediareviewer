@@ -55,7 +55,8 @@ def test_stream_media_items_returns_supported_files_and_status(tmp_path: Path) -
     item_lines = lines[:-1]
     done_line = json.loads(lines[-1])
 
-    assert done_line == {"type": "done", "count": 2}
+    assert done_line["type"] == "done"
+    assert done_line["count"] == 2
     item_names = {json.loads(ln)["name"] for ln in item_lines}
     assert item_names == {"frame001.jpg", "clip001.mp4"}
 
@@ -218,7 +219,8 @@ def test_stream_media_items_yields_items_progressively(tmp_path: Path) -> None:
         assert item["thumbnailUrl"].startswith("/api/media-thumbnail?")
         assert "type" not in item
 
-    assert done_line == {"type": "done", "count": 2}
+    assert done_line["type"] == "done"
+    assert done_line["count"] == 2
 
 
 def test_stream_media_items_rejects_unknown_path(tmp_path: Path) -> None:
@@ -323,7 +325,8 @@ def test_stream_media_items_offset_pagination(tmp_path: Path) -> None:
     first_done = json.loads(first_lines[-1])
 
     assert first_names == ["img_01.jpg", "img_02.jpg"]
-    assert first_done == {"type": "done", "count": 2}
+    assert first_done["type"] == "done"
+    assert first_done["count"] == 2
 
     # Second page: offset=2, limit=2 → img_03 only (count < limit → no more pages)
     second_response = client.get(
@@ -335,7 +338,8 @@ def test_stream_media_items_offset_pagination(tmp_path: Path) -> None:
     second_done = json.loads(second_lines[-1])
 
     assert second_names == ["img_03.jpg"]
-    assert second_done == {"type": "done", "count": 1}
+    assert second_done["type"] == "done"
+    assert second_done["count"] == 1
 
 
 def _make_stream_client(tmp_path: Path) -> tuple["FlaskClient", Path]:
@@ -508,7 +512,8 @@ def test_stream_status_filter_unseen_respects_limit_and_offset(tmp_path: Path) -
     )
     lines1 = [ln for ln in r1.data.decode().splitlines() if ln.strip()]
     assert [json.loads(ln)["name"] for ln in lines1[:-1]] == ["a.jpg", "b.jpg"]
-    assert json.loads(lines1[-1]) == {"type": "done", "count": 2}
+    assert json.loads(lines1[-1])["type"] == "done"
+    assert json.loads(lines1[-1])["count"] == 2
 
     # Page 2: offset=2, limit=2 → c only (d_seen excluded by filter)
     r2 = client.get(
@@ -522,5 +527,160 @@ def test_stream_status_filter_unseen_respects_limit_and_offset(tmp_path: Path) -
     )
     lines2 = [ln for ln in r2.data.decode().splitlines() if ln.strip()]
     assert [json.loads(ln)["name"] for ln in lines2[:-1]] == ["c.jpg"]
-    assert json.loads(lines2[-1]) == {"type": "done", "count": 1}
+    assert json.loads(lines2[-1])["type"] == "done"
+    assert json.loads(lines2[-1])["count"] == 1
+
+
+# ---------------------------------------------------------------------------
+# Cursor-based pagination (after= query parameter)
+# ---------------------------------------------------------------------------
+
+
+def test_stream_cursor_pagination_done_event_contains_last_path(tmp_path: Path) -> None:
+    """The 'done' event must include 'lastPath' set to the last yielded item's path."""
+
+    import json
+
+    client, review_directory = _make_stream_client(tmp_path)
+    Image.new("RGB", (8, 8)).save(review_directory / "img_a.jpg")
+    Image.new("RGB", (8, 8)).save(review_directory / "img_b.jpg")
+
+    response = client.get(
+        "/api/media-items/stream",
+        query_string={"path": str(review_directory.resolve()), "limit": "10"},
+    )
+    lines = [ln for ln in response.data.decode().splitlines() if ln.strip()]
+    done = json.loads(lines[-1])
+
+    assert done["type"] == "done"
+    assert done["count"] == 2
+    assert done["lastPath"] is not None
+    assert done["lastPath"].endswith("img_b.jpg")
+
+
+def test_stream_cursor_pagination_resumes_after_cursor(tmp_path: Path) -> None:
+    """The 'after' cursor must resume the scan from just after the cursor path."""
+
+    import json
+
+    client, review_directory = _make_stream_client(tmp_path)
+    for name in ("p1.jpg", "p2.jpg", "p3.jpg"):
+        Image.new("RGB", (8, 8)).save(review_directory / name)
+
+    # Page 1: get first 2 items and record the cursor.
+    r1 = client.get(
+        "/api/media-items/stream",
+        query_string={"path": str(review_directory.resolve()), "limit": "2"},
+    )
+    lines1 = [ln for ln in r1.data.decode().splitlines() if ln.strip()]
+    cursor = json.loads(lines1[-1])["lastPath"]
+    assert cursor is not None
+
+    # Page 2: pass cursor as 'after'; must return exactly p3.jpg.
+    r2 = client.get(
+        "/api/media-items/stream",
+        query_string={
+            "path": str(review_directory.resolve()),
+            "limit": "2",
+            "after": cursor,
+        },
+    )
+    lines2 = [ln for ln in r2.data.decode().splitlines() if ln.strip()]
+    names2 = [json.loads(ln)["name"] for ln in lines2[:-1]]
+    done2 = json.loads(lines2[-1])
+
+    assert names2 == ["p3.jpg"]
+    assert done2["type"] == "done"
+    assert done2["count"] == 1
+
+
+def test_stream_cursor_pagination_no_gap_when_items_reviewed_between_pages(
+    tmp_path: Path,
+) -> None:
+    """Cursor pagination must not skip items even when the user reviews items between pages.
+
+    This is the core regression test for the offset-based gap bug: with offset=N
+    and statusFilter=unseen, marking items seen between pages shifts the
+    'unseen' boundary and causes items to be dropped.  The cursor approach
+    tracks filesystem position, not filter-subset position, so it is immune.
+    """
+
+    import json
+
+    client, review_directory = _make_stream_client(tmp_path)
+    for name in ("f01.jpg", "f02.jpg", "f03.jpg", "f04.jpg", "f05.jpg"):
+        Image.new("RGB", (8, 8)).save(review_directory / name)
+
+    # Page 1: 2 unseen items.
+    r1 = client.get(
+        "/api/media-items/stream",
+        query_string={
+            "path": str(review_directory.resolve()),
+            "limit": "2",
+            "statusFilter": "unseen",
+        },
+    )
+    lines1 = [ln for ln in r1.data.decode().splitlines() if ln.strip()]
+    assert [json.loads(ln)["name"] for ln in lines1[:-1]] == ["f01.jpg", "f02.jpg"]
+    cursor = json.loads(lines1[-1])["lastPath"]
+
+    # Simulate user reviewing: mark both page-1 items as seen.
+    (review_directory / "f01.jpg.seen").write_text("", encoding="utf-8")
+    (review_directory / "f02.jpg.seen").write_text("", encoding="utf-8")
+
+    # Page 2 with cursor: must return f03, f04 (NOT skip them due to seen f01/f02).
+    r2 = client.get(
+        "/api/media-items/stream",
+        query_string={
+            "path": str(review_directory.resolve()),
+            "limit": "2",
+            "statusFilter": "unseen",
+            "after": cursor,
+        },
+    )
+    lines2 = [ln for ln in r2.data.decode().splitlines() if ln.strip()]
+    names2 = [json.loads(ln)["name"] for ln in lines2[:-1]]
+
+    # f03 and f04 must be returned; they must not be skipped.
+    assert names2 == ["f03.jpg", "f04.jpg"]
+
+
+def test_stream_cursor_done_event_last_path_is_null_when_no_items(tmp_path: Path) -> None:
+    """The 'lastPath' field in the done event must be null when no items are yielded."""
+
+    import json
+
+    client, review_directory = _make_stream_client(tmp_path)
+    # No media files — only a non-media file.
+    (review_directory / "readme.txt").write_text("x", encoding="utf-8")
+
+    response = client.get(
+        "/api/media-items/stream",
+        query_string={"path": str(review_directory.resolve()), "limit": "10"},
+    )
+    lines = [ln for ln in response.data.decode().splitlines() if ln.strip()]
+    done = json.loads(lines[-1])
+
+    assert done["type"] == "done"
+    assert done["count"] == 0
+    assert done["lastPath"] is None
+
+
+def test_stream_cursor_after_outside_path_rejected(tmp_path: Path) -> None:
+    """The 'after' parameter must be rejected when it points outside the review path."""
+
+    client, review_directory = _make_stream_client(tmp_path)
+
+    response = client.get(
+        "/api/media-items/stream",
+        query_string={
+            "path": str(review_directory.resolve()),
+            "limit": "10",
+            "after": "/etc/passwd",
+        },
+    )
+
+    assert response.status_code == 400
+    assert "after" in response.get_json()["error"].lower()
+
 

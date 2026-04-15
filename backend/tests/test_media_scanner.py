@@ -320,3 +320,59 @@ def test_scan_stream_trashed_items_excluded_from_unseen_filter(tmp_path: Path) -
     names = [i.name for i in items]
     assert "trashed.jpg" not in names
 
+
+# ---------------------------------------------------------------------------
+# MediaScanner — cursor-based pagination (after_path)
+# ---------------------------------------------------------------------------
+
+
+def test_scan_stream_cursor_resumes_after_given_path(tmp_path: Path) -> None:
+    """scan_stream with after_path must yield only files that come after it in scan order."""
+    (tmp_path / "a.jpg").write_bytes(b"x")
+    (tmp_path / "b.jpg").write_bytes(b"x")
+    (tmp_path / "c.jpg").write_bytes(b"x")
+
+    scanner = MediaScanner()
+    # Simulate page 1: scan to get cursor path.
+    page1 = list(scanner.scan_stream(tmp_path, limit=2))
+    assert [i.name for i in page1] == ["a.jpg", "b.jpg"]
+
+    cursor = (tmp_path / "b.jpg").resolve()
+    page2 = list(scanner.scan_stream(tmp_path, limit=2, after_path=cursor))
+    assert [i.name for i in page2] == ["c.jpg"]
+
+
+def test_scan_stream_cursor_no_gap_when_earlier_items_filtered(tmp_path: Path) -> None:
+    """Cursor must not skip items even when previously loaded items no longer match filter.
+
+    This is the regression test for the offset-shift gap bug.
+    """
+    for name in ("f01.jpg", "f02.jpg", "f03.jpg", "f04.jpg"):
+        (tmp_path / name).write_bytes(b"x")
+
+    scanner = MediaScanner()
+    # Page 1: first 2 unseen items.
+    page1 = list(scanner.scan_stream(tmp_path, limit=2, status_filter="unseen"))
+    assert [i.name for i in page1] == ["f01.jpg", "f02.jpg"]
+    cursor = (tmp_path / "f02.jpg").resolve()
+
+    # Mark page-1 items as seen — simulates user reviewing them.
+    (tmp_path / "f01.jpg.seen").write_text("", encoding="utf-8")
+    (tmp_path / "f02.jpg.seen").write_text("", encoding="utf-8")
+
+    # Page 2 with cursor: f03, f04 must be returned; NOT skipped.
+    page2 = list(
+        scanner.scan_stream(tmp_path, limit=2, status_filter="unseen", after_path=cursor)
+    )
+    assert [i.name for i in page2] == ["f03.jpg", "f04.jpg"]
+
+
+def test_scan_stream_cursor_returns_empty_when_at_end(tmp_path: Path) -> None:
+    """scan_stream with a cursor pointing to the last file returns no items."""
+    (tmp_path / "only.jpg").write_bytes(b"x")
+    cursor = (tmp_path / "only.jpg").resolve()
+
+    scanner = MediaScanner()
+    result = list(scanner.scan_stream(tmp_path, limit=10, after_path=cursor))
+    assert result == []
+

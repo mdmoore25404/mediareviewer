@@ -297,14 +297,34 @@ class MediaScanner:
         return ScanResult(items=tuple(items), ignored_count=ignored_count)
 
     def scan_stream(
-        self, root_path: Path, limit: int, offset: int = 0, status_filter: StatusFilter = "all"
+        self,
+        root_path: Path,
+        limit: int,
+        offset: int = 0,
+        status_filter: StatusFilter = "all",
+        after_path: Path | None = None,
     ) -> Iterator[MediaItem]:
         """Yield media items one at a time as they are discovered, up to *limit*.
 
-        *offset* media items that pass the *status_filter* (and would otherwise
-        be yielded) are skipped first, enabling page-based pagination.
-        *status_filter* is applied on the filesystem before counting against
-        *offset* or *limit*, so every page contains only matching items.
+        Pagination is controlled by two mutually exclusive mechanisms:
+
+        * **Cursor mode** (preferred): when *after_path* is supplied the scan
+          traverses every candidate in scan order and silently skips all files
+          whose resolved path compares ``<=`` *after_path*.  Once a file with
+          a path ``>`` *after_path* is found, normal filtering and counting
+          resume.  *offset* is ignored in cursor mode.  This mode is safe
+          across concurrent reviews because it tracks *position in the
+          filesystem order* rather than *position within the filtered subset* —
+          so items reviewed (seen/trashed) between pages do not shift the page
+          boundary.
+
+        * **Offset mode** (legacy): when *after_path* is ``None``, *offset*
+          filtered items are skipped from the start of the scan before
+          yielding begins.  This mode can miss items when the filtered subset
+          changes between page requests (e.g. user marks items as seen between
+          page 1 and page 2), and is retained only for backward compatibility.
+
+        *status_filter* values:
 
         - ``"all"``    — no filtering; return every media file.
         - ``"unseen"`` — items without a ``.seen`` companion file.
@@ -321,6 +341,7 @@ class MediaScanner:
         """
 
         normalized_root = root_path.expanduser().resolve()
+        past_cursor = after_path is None  # True → start yielding immediately
         skipped = 0
         count = 0
         # Trashed items live in .trash/ subdirs, which the normal walker skips.
@@ -340,6 +361,11 @@ class MediaScanner:
             media_type = self._detect_media_type(candidate)
             if media_type is None:
                 continue
+            # Cursor mode: advance past after_path before filtering/counting.
+            if not past_cursor:
+                if candidate <= after_path:  # type: ignore[operator]
+                    continue
+                past_cursor = True
             if not self._matches_status_filter(candidate, status_filter):
                 continue
             if skipped < offset:

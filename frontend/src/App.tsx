@@ -112,6 +112,7 @@ function App(): ReactElement {
   const [isFetchingMore, setIsFetchingMore] = useState<boolean>(false);
   const [hasMore, setHasMore] = useState<boolean>(false);
   const [fetchMoreFailed, setFetchMoreFailed] = useState<boolean>(false);
+  const [scanCursor, setScanCursor] = useState<string | null>(null);
   const scanAbortRef = useRef<AbortController | null>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -183,6 +184,7 @@ function App(): ReactElement {
     scanAbortRef.current?.abort();
     setMediaItems([]);
     setHasMore(false);
+    setScanCursor(null);
     setStatusMessage(null);
   }, [statusFilter]);
 
@@ -397,6 +399,7 @@ function App(): ReactElement {
     setMediaItems([]);
     setIgnoredCount(0);
     setHasMore(false);
+    setScanCursor(null);
     setStatusMessage(null);
     setErrorMessage(null);
 
@@ -404,6 +407,7 @@ function App(): ReactElement {
     try {
       for await (const event of streamMediaItems(selectedPath, scanLimit, controller.signal, 0, statusFilter)) {
         if ("type" in event && event.type === "done") {
+          setScanCursor(event.lastPath ?? null);
           setHasMore(event.count >= scanLimit);
           setStatusMessage(`Loaded ${event.count} media items from ${selectedPath}.`);
         } else {
@@ -430,10 +434,19 @@ function App(): ReactElement {
     setFetchMoreFailed(false);
 
     try {
-      const offset = mediaItems.length;
       let count = 0;
-      for await (const event of streamMediaItems(selectedPath, scanLimit, controller.signal, offset, statusFilter)) {
+      // Use the cursor from the last page so items reviewed between page loads
+      // do not shift the page boundary and cause gaps or duplicates.
+      for await (const event of streamMediaItems(
+        selectedPath,
+        scanLimit,
+        controller.signal,
+        0,
+        statusFilter,
+        scanCursor ?? undefined,
+      )) {
         if ("type" in event && event.type === "done") {
+          setScanCursor(event.lastPath ?? null);
           setHasMore(event.count >= scanLimit);
         } else {
           count += 1;

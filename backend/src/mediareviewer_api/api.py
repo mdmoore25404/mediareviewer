@@ -257,8 +257,11 @@ def stream_media_items() -> Response:
     Each line of the response body is a JSON object.  Item lines have the same
     shape as a single element from the ``items`` array that the old polling
     endpoint returned.  The final line has the shape
-    ``{"type": "done", "count": N}`` to let the client confirm how many items
-    were actually streamed.
+    ``{"type": "done", "count": N, "lastPath": "<path>|null"}`` where
+    ``lastPath`` is the filesystem path of the last item yielded (or ``null``
+    when no items were found).  Clients should pass ``lastPath`` back as the
+    ``after`` query parameter on the next page request to enable gap-free
+    cursor-based pagination that is safe across concurrent reviews.
     """
 
     config_store = cast(
@@ -286,6 +289,18 @@ def stream_media_items() -> Response:
     if offset < 0:
         return jsonify({"error": "Query parameter 'offset' must be >= 0."}), 400
 
+    raw_after = request.args.get("after", default=None, type=str)
+    after_path: Path | None = None
+    if raw_after:
+        after_candidate = Path(raw_after).expanduser().resolve()
+        # Safety: after_path must lie inside the requested review path so
+        # a crafted cursor cannot reach outside the user's review scope.
+        try:
+            after_candidate.relative_to(Path(raw_path).expanduser().resolve())
+            after_path = after_candidate
+        except ValueError:
+            return jsonify({"error": "Query parameter 'after' must be inside 'path'."}), 400
+
     raw_status_filter = request.args.get("statusFilter", default="all", type=str)
     valid_status_filters = {"all", "unseen", "seen", "locked", "trashed"}
     if raw_status_filter not in valid_status_filters:
@@ -304,17 +319,20 @@ def stream_media_items() -> Response:
     @stream_with_context
     def generate() -> Response:
         count = 0
+        last_path: str | None = None
         for item in media_scanner.scan_stream(
             root_path=requested_path,
             limit=limit,
             offset=offset,
             status_filter=status_filter,
+            after_path=after_path,
         ):
             item_payload = item.to_payload()
             item_payload["thumbnailUrl"] = _build_media_thumbnail_url(item.path, 256)
             yield json.dumps(item_payload) + "\n"
             count += 1
-        yield json.dumps({"type": "done", "count": count}) + "\n"
+            last_path = item.path
+        yield json.dumps({"type": "done", "count": count, "lastPath": last_path}) + "\n"
 
     # Start a low-priority daemon thread that warms the thumbnail cache for
     # every item in the path (not just the current page) so future scrolls
