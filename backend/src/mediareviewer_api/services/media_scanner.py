@@ -409,15 +409,30 @@ class MediaScanner:
 
         Directories that cannot be read due to permission restrictions are
         silently skipped rather than raising a 500 error to the caller.
+        Errors are logged at DEBUG level so operators can diagnose permission
+        issues without exposing details in API responses.
         """
 
         normalized_parent = parent_path.expanduser().resolve()
         if not normalized_parent.is_dir():
+            _log.debug("get_folders: %s is not a directory", normalized_parent)
             return ()
 
         try:
+            st = normalized_parent.stat()
+            _log.debug(
+                "get_folders: listing %s  (uid=%d gid=%d mode=%o)",
+                normalized_parent,
+                st.st_uid,
+                st.st_gid,
+                st.st_mode,
+            )
             entries = sorted(normalized_parent.iterdir())
-        except PermissionError:
+        except PermissionError as exc:
+            _log.debug("get_folders: cannot list %s — %s", normalized_parent, exc)
+            return ()
+        except OSError as exc:
+            _log.debug("get_folders: OS error listing %s — %s", normalized_parent, exc)
             return ()
 
         folders: list[FolderInfo] = []
@@ -429,12 +444,14 @@ class MediaScanner:
                     child.is_dir() and not child.name.startswith(".")
                     for child in item.iterdir()
                 )
-            except PermissionError:
+            except PermissionError as exc:
+                _log.debug("get_folders: cannot check children of %s — %s", item, exc)
                 has_children = False
             folders.append(
                 FolderInfo(path=str(item), name=item.name, has_children=has_children)
             )
 
+        _log.debug("get_folders: %s → %d subfolder(s) found", normalized_parent, len(folders))
         return tuple(folders)
 
     def _matches_status_filter(self, file_path: Path, status_filter: StatusFilter) -> bool:
