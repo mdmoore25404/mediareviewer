@@ -9,13 +9,19 @@ export default defineConfig([
   globalIgnores(["dist"]),
   {
     files: ["**/*.{ts,tsx}"],
+    plugins: {
+      "react-hooks": reactHooks,
+      "react-refresh": reactRefresh,
+    },
     extends: [
       js.configs.recommended,
       ...tseslint.configs.recommendedTypeChecked,
       ...tseslint.configs.stylisticTypeChecked,
-      reactHooks.configs["recommended-latest"],
-      reactRefresh.configs.vite,
     ],
+    rules: {
+      ...reactHooks.configs["recommended-latest"].rules,
+      "react-refresh/only-export-components": ["warn", { allowConstantExport: true }],
+    },
     languageOptions: {
       ecmaVersion: 2022,
       globals: {
