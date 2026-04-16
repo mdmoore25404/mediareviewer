@@ -75,6 +75,13 @@ ENV MEDIAREVIEWER_HOST=0.0.0.0 \
 
 EXPOSE 8080
 
-# entrypoint.sh chowns /data, drops to PUID:PGID, then execs mediareviewer-api
+# entrypoint.sh chowns /data, drops to PUID:PGID, then execs the CMD below.
+# gunicorn config:
+#   gthread worker  — handles concurrent requests + SSE streams without blocking
+#   1 worker        — single-user NAS app; forking multiple workers would
+#                     duplicate the background thumbnail-warmup threads
+#   4 threads       — enough for simultaneous API + SSE + static file requests
+#   timeout 300s    — allows long-running scan SSE streams to complete
+#   access-logfile  — log to stdout so Docker / NAS UI captures it
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
-CMD ["mediareviewer-api"]
+CMD ["gunicorn", "--bind", "0.0.0.0:8080", "--worker-class", "gthread", "--workers", "1", "--threads", "4", "--timeout", "300", "--access-logfile", "-", "mediareviewer_api.app:create_app()"]

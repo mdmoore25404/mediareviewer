@@ -169,7 +169,11 @@ def _start_startup_thumbnail_warmup(
 
 
 def main() -> None:
-    """Run the API in local development mode."""
+    """Run the API in local development mode (Flask dev server, debug=True).
+
+    Not used in Docker/production — the container CMD invokes gunicorn directly
+    via ``gunicorn ... mediareviewer_api.app:create_app()``.
+    """
 
     settings = AppSettings.from_env()
     app = create_app(settings)
