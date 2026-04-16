@@ -1,5 +1,6 @@
 import type {
   AddReviewPathResponse,
+  AppSettingsResponse,
   FolderFilesResponse,
   FoldersResponse,
   HealthResponse,
@@ -252,4 +253,28 @@ export async function fetchLogs(signal: AbortSignal, lines = 200): Promise<LogsR
     signal,
   });
   return parseJsonResponse<LogsResponse>(response);
+}
+
+export async function fetchSettings(signal: AbortSignal): Promise<AppSettingsResponse> {
+  const response = await fetch("/api/settings", {
+    headers: { Accept: "application/json" },
+    signal,
+  });
+  return parseJsonResponse<AppSettingsResponse>(response);
+}
+
+export async function patchSettings(
+  patch: Partial<AppSettingsResponse>,
+  signal: AbortSignal,
+): Promise<AppSettingsResponse> {
+  const response = await fetch("/api/settings", {
+    method: "PATCH",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(patch),
+    signal,
+  });
+  return parseJsonResponse<AppSettingsResponse>(response);
 }

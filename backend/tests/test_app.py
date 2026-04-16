@@ -5,6 +5,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
+import yaml
 from flask.testing import FlaskClient
 
 from mediareviewer_api.app import _configure_logging, _deduplicate_paths, create_app
@@ -307,3 +308,98 @@ def test_configure_logging_creates_log_file(tmp_path: Path) -> None:
         pkg_logger.handlers.extend(saved_handlers)
         pkg_logger.setLevel(saved_level)
         pkg_logger.propagate = saved_propagate
+
+
+# ---------------------------------------------------------------------------
+# GET /api/settings and PATCH /api/settings
+# ---------------------------------------------------------------------------
+
+
+def test_get_settings_returns_video_preload_mb(tmp_path: Path) -> None:
+    """GET /api/settings must return the current videoPreloadMb value."""
+
+    settings = AppSettings(
+        state_directory=tmp_path,
+        hidden_picker_paths=(),
+        deletion_workers=1,
+        video_preload_mb=75,
+    )
+    app = create_app(settings)
+    client: FlaskClient = app.test_client()
+
+    response = client.get("/api/settings")
+
+    assert response.status_code == 200
+    assert response.get_json() == {"videoPreloadMb": 75}
+
+
+def test_patch_settings_updates_video_preload_mb(tmp_path: Path) -> None:
+    """PATCH /api/settings should persist and return the updated videoPreloadMb."""
+
+    state_directory = tmp_path / "state"
+    state_directory.mkdir(parents=True)
+    settings = AppSettings(
+        state_directory=state_directory,
+        hidden_picker_paths=(),
+        deletion_workers=1,
+        video_preload_mb=50,
+    )
+    app = create_app(settings)
+    client: FlaskClient = app.test_client()
+
+    response = client.patch("/api/settings", json={"videoPreloadMb": 200})
+
+    assert response.status_code == 200
+    assert response.get_json() == {"videoPreloadMb": 200}
+
+    # Verify the YAML file was written with the new value.
+    written = yaml.safe_load((state_directory / "config.yaml").read_text(encoding="utf-8"))
+    assert written["server"]["video_preload_mb"] == 200
+
+
+def test_patch_settings_rejects_non_integer(tmp_path: Path) -> None:
+    """PATCH /api/settings must return 422 when videoPreloadMb is not an integer."""
+
+    settings = AppSettings(
+        state_directory=tmp_path,
+        hidden_picker_paths=(),
+        deletion_workers=1,
+    )
+    app = create_app(settings)
+    client: FlaskClient = app.test_client()
+
+    response = client.patch("/api/settings", json={"videoPreloadMb": "large"})
+
+    assert response.status_code == 422
+
+
+def test_patch_settings_rejects_out_of_range(tmp_path: Path) -> None:
+    """PATCH /api/settings must return 422 when videoPreloadMb is out of range."""
+
+    settings = AppSettings(
+        state_directory=tmp_path,
+        hidden_picker_paths=(),
+        deletion_workers=1,
+    )
+    app = create_app(settings)
+    client: FlaskClient = app.test_client()
+
+    response = client.patch("/api/settings", json={"videoPreloadMb": 0})
+
+    assert response.status_code == 422
+
+
+def test_patch_settings_rejects_non_object_body(tmp_path: Path) -> None:
+    """PATCH /api/settings must return 400 when the body is not a JSON object."""
+
+    settings = AppSettings(
+        state_directory=tmp_path,
+        hidden_picker_paths=(),
+        deletion_workers=1,
+    )
+    app = create_app(settings)
+    client: FlaskClient = app.test_client()
+
+    response = client.patch("/api/settings", json=["videoPreloadMb", 100])
+
+    assert response.status_code == 400

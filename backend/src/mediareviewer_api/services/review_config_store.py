@@ -17,6 +17,7 @@ class DevServerSettings:
     frontend_host: str = "0.0.0.0"
     frontend_port: int = 5173
     trusted_hosts: tuple[str, ...] = ()
+    video_preload_mb: int = 50
 
 
 @dataclass(frozen=True, slots=True)
@@ -82,6 +83,9 @@ class ReviewConfigStore:
                 for item in raw_server.get("trusted_hosts", default_server.trusted_hosts)
                 if isinstance(item, str) and item
             ),
+            video_preload_mb=int(
+                raw_server.get("video_preload_mb", default_server.video_preload_mb)
+            ),
         )
 
         resolved_paths: list[Path] = []
@@ -124,6 +128,26 @@ class ReviewConfigStore:
         self._write(updated)
         return updated
 
+    def set_video_preload_mb(self, value: int) -> "ReviewConfig":
+        """Persist a new video_preload_mb value and return the updated config."""
+
+        current = self.load()
+        updated_server = DevServerSettings(
+            backend_host=current.server.backend_host,
+            backend_port=current.server.backend_port,
+            frontend_host=current.server.frontend_host,
+            frontend_port=current.server.frontend_port,
+            trusted_hosts=current.server.trusted_hosts,
+            video_preload_mb=value,
+        )
+        updated = ReviewConfig(
+            known_paths=current.known_paths,
+            available_paths=current.available_paths,
+            server=updated_server,
+        )
+        self._write(updated)
+        return updated
+
     def _write(self, config: ReviewConfig) -> None:
         """Write the YAML configuration file, creating the parent directory if needed."""
 
@@ -137,6 +161,7 @@ class ReviewConfigStore:
                 "frontend_host": config.server.frontend_host,
                 "frontend_port": config.server.frontend_port,
                 "trusted_hosts": list(config.server.trusted_hosts),
+                "video_preload_mb": config.server.video_preload_mb,
             },
         }
         self._config_file_path.write_text(

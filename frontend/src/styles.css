@@ -358,6 +358,10 @@ body {
   white-space: nowrap;
 }
 
+.settings-number-input {
+  width: 6rem;
+}
+
 .review-counter-loading {
   font-size: 0.72rem;
   font-weight: 400;

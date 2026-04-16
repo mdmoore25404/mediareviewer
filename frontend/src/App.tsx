@@ -8,12 +8,15 @@ import {
   fetchHealth,
   fetchLogs,
   fetchReviewPaths,
+  fetchSettings,
   fetchStatusSummary,
+  patchSettings,
   removeReviewPath,
   streamEmptyTrash,
   streamMediaItems,
 } from "./api/client";
 import type {
+  AppSettingsResponse,
   HealthResponse,
   LogsResponse,
   MediaAction,
@@ -154,6 +157,11 @@ function App(): ReactElement {
   const [showHelp, setShowHelp] = useState<boolean>(false);
   const [trashLockedWarning, setTrashLockedWarning] = useState<TrashLockedWarning | null>(null);
   const [showSettings, setShowSettings] = useState<boolean>(false);
+  const [appSettings, setAppSettings] = useState<AppSettingsResponse | null>(null);
+  const [videoPreloadMbInput, setVideoPreloadMbInput] = useState<string>("");
+  const [settingsSaveError, setSettingsSaveError] = useState<string | null>(null);
+  const [settingsSaving, setSettingsSaving] = useState<boolean>(false);
+  const settingsAbortRef = useRef<AbortController | null>(null);
   const [isActionPending, setIsActionPending] = useState<boolean>(false);
   const [statusSummary, setStatusSummary] = useState<StatusSummary | null>(null);
   const summaryAbortRef = useRef<AbortController | null>(null);
@@ -169,14 +177,17 @@ function App(): ReactElement {
 
     const loadBootstrap = async (): Promise<void> => {
       try {
-        const [healthPayload, pathsPayload] = await Promise.all([
+        const [healthPayload, pathsPayload, settingsPayload] = await Promise.all([
           fetchHealth(abortController.signal),
           fetchReviewPaths(abortController.signal),
+          fetchSettings(abortController.signal),
         ]);
         setHealth(healthPayload);
         setKnownPaths(pathsPayload.knownPaths);
         setHiddenPaths(pathsPayload.hiddenPickerPaths);
         setAvailablePaths(pathsPayload.availablePaths);
+        setAppSettings(settingsPayload);
+        setVideoPreloadMbInput(String(settingsPayload.videoPreloadMb));
         if (pathsPayload.availablePaths.length > 0) {
           setNewPathInput(pathsPayload.availablePaths[0]);
         }
@@ -1610,6 +1621,8 @@ function App(): ReactElement {
             onClick={(event) => {
               if (event.target === event.currentTarget) {
                 logsAbortRef.current?.abort();
+                settingsAbortRef.current?.abort();
+                setSettingsSaveError(null);
                 setShowSettings(false);
               }
             }}
@@ -1626,6 +1639,8 @@ function App(): ReactElement {
                   aria-label="Close settings"
                   onClick={() => {
                     logsAbortRef.current?.abort();
+                    settingsAbortRef.current?.abort();
+                    setSettingsSaveError(null);
                     setShowSettings(false);
                   }}
                 />
@@ -1664,16 +1679,72 @@ function App(): ReactElement {
                 )}
               </div>
 
-              <div className="mb-0">
-                <p className="settings-section-label">Video preload buffer</p>
-                <p className="mb-0 small">
-                  {health?.settings.videoPreloadMb != null
-                    ? `${health.settings.videoPreloadMb} MB`
-                    : "-"}
-                  <span className="text-secondary ms-2">
-                    (set via <code>MEDIAREVIEWER_VIDEO_PRELOAD_MB</code>)
-                  </span>
-                </p>
+              <div className="mb-3">
+                <label htmlFor="settings-video-preload-mb" className="settings-section-label">
+                  Video preload buffer (MB)
+                </label>
+                <div className="d-flex align-items-center gap-2">
+                  <input
+                    id="settings-video-preload-mb"
+                    type="number"
+                    className="form-control form-control-sm settings-number-input"
+                    min={1}
+                    max={10000}
+                    value={videoPreloadMbInput}
+                    disabled={settingsSaving}
+                    onChange={(e) => {
+                      setVideoPreloadMbInput(e.target.value);
+                      setSettingsSaveError(null);
+                    }}
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-primary"
+                    disabled={
+                      settingsSaving ||
+                      videoPreloadMbInput === String(appSettings?.videoPreloadMb ?? "")
+                    }
+                    onClick={() => {
+                      const parsed = parseInt(videoPreloadMbInput, 10);
+                      if (!Number.isFinite(parsed) || parsed < 1 || parsed > 10000) {
+                        setSettingsSaveError("Enter a value between 1 and 10000.");
+                        return;
+                      }
+                      settingsAbortRef.current?.abort();
+                      const controller = new AbortController();
+                      settingsAbortRef.current = controller;
+                      setSettingsSaving(true);
+                      setSettingsSaveError(null);
+                      patchSettings({ videoPreloadMb: parsed }, controller.signal)
+                        .then((updated) => {
+                          setAppSettings(updated);
+                          setVideoPreloadMbInput(String(updated.videoPreloadMb));
+                        })
+                        .catch((error: unknown) => {
+                          if (error instanceof Error && error.name === "AbortError") return;
+                          setSettingsSaveError(
+                            error instanceof Error ? error.message : "Save failed.",
+                          );
+                        })
+                        .finally(() => {
+                          setSettingsSaving(false);
+                        });
+                    }}
+                  >
+                    {settingsSaving ? (
+                      <span
+                        className="spinner-border spinner-border-sm"
+                        role="status"
+                        aria-hidden="true"
+                      />
+                    ) : (
+                      "Save"
+                    )}
+                  </button>
+                </div>
+                {settingsSaveError !== null && (
+                  <p className="text-danger small mt-1 mb-0">{settingsSaveError}</p>
+                )}
               </div>
 
               <div className="mb-0 mt-3">

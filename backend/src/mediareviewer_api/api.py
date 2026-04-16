@@ -5,7 +5,7 @@ import json
 import logging
 import os
 import threading
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from pathlib import Path
 from typing import cast
 from urllib.parse import urlencode
@@ -25,6 +25,53 @@ from mediareviewer_api.services.thumbnail_cache import ThumbnailCacheService
 
 api_blueprint = Blueprint("api", __name__, url_prefix="/api")
 logger = logging.getLogger(__name__)
+
+_VIDEO_PRELOAD_MB_MIN = 1
+_VIDEO_PRELOAD_MB_MAX = 10_000
+
+
+@api_blueprint.get("/settings")
+def get_settings() -> Response:
+    """Return user-configurable runtime settings."""
+
+    settings = cast(AppSettings, current_app.config["MEDIAREVIEWER_SETTINGS"])
+    return jsonify({"videoPreloadMb": settings.video_preload_mb})
+
+
+@api_blueprint.patch("/settings")
+def patch_settings() -> Response:
+    """Update one or more user-configurable settings and persist to config.yaml."""
+
+    settings = cast(AppSettings, current_app.config["MEDIAREVIEWER_SETTINGS"])
+    config_store = cast(
+        ReviewConfigStore,
+        current_app.extensions["mediareviewer.review_config_store"],
+    )
+
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict):
+        return jsonify({"error": "Request body must be a JSON object."}), 400
+
+    if "videoPreloadMb" in body:
+        raw_value = body["videoPreloadMb"]
+        if not isinstance(raw_value, int) or isinstance(raw_value, bool):
+            return jsonify({"error": "'videoPreloadMb' must be an integer."}), 422
+        if not (_VIDEO_PRELOAD_MB_MIN <= raw_value <= _VIDEO_PRELOAD_MB_MAX):
+            return jsonify(
+                {
+                    "error": (
+                        f"'videoPreloadMb' must be between {_VIDEO_PRELOAD_MB_MIN}"
+                        f" and {_VIDEO_PRELOAD_MB_MAX}."
+                    )
+                }
+            ), 422
+        config_store.set_video_preload_mb(raw_value)
+        current_app.config["MEDIAREVIEWER_SETTINGS"] = replace(
+            settings, video_preload_mb=raw_value
+        )
+        settings = cast(AppSettings, current_app.config["MEDIAREVIEWER_SETTINGS"])
+
+    return jsonify({"videoPreloadMb": settings.video_preload_mb})
 
 
 @api_blueprint.get("/health")

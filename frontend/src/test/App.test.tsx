@@ -182,6 +182,24 @@ describe("App", () => {
         });
       }
 
+      if (url.endsWith("/api/settings")) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ videoPreloadMb: 50 }),
+        });
+      }
+
+      if (url.startsWith("/api/media-items/summary")) {
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              path: "/home/user/media",
+              counts: { all: 2, unseen: 2, seen: 0, locked: 0, trashed: 0 },
+            }),
+        });
+      }
+
       return Promise.resolve({
         ok: false,
         json: () => Promise.resolve({ error: `Unhandled request: ${url}` }),
@@ -398,6 +416,8 @@ describe("App", () => {
       if (url.endsWith("/api/review-paths") && (!init?.method || init.method === "GET")) {
         return Promise.resolve({ ok: true, json: () => Promise.resolve(reviewPathsResponse) });
       }
+      if (url.endsWith("/api/settings")) return Promise.resolve({ ok: true, json: () => Promise.resolve({ videoPreloadMb: 50 }) });
+      if (url.startsWith("/api/media-items/summary")) return Promise.resolve({ ok: true, json: () => Promise.resolve({ path: "/home/user/media", counts: { all: 1, unseen: 1, seen: 0, locked: 0, trashed: 0 } }) });
       if (url.startsWith("/api/media-items/stream?")) {
         return Promise.resolve({ ok: true, body: makeStreamBody([videoItem]) });
       }
@@ -445,6 +465,10 @@ describe("App", () => {
       if (url.endsWith("/api/review-paths") && (!init?.method || init.method === "GET")) {
         return Promise.resolve({ ok: true, json: () => Promise.resolve(reviewPathsResponse) });
       }
+      if (url.endsWith("/api/settings")) return Promise.resolve({ ok: true, json: () => Promise.resolve({ videoPreloadMb: 50 }) });
+      if (url.startsWith("/api/media-items/summary")) return Promise.resolve({ ok: true, json: () => Promise.resolve({ path: "/home/user/media", counts: { all: 1, unseen: 1, seen: 0, locked: 0, trashed: 0 } }) });
+      if (url.endsWith("/api/settings")) return Promise.resolve({ ok: true, json: () => Promise.resolve({ videoPreloadMb: 50 }) });
+      if (url.startsWith("/api/media-items/summary")) return Promise.resolve({ ok: true, json: () => Promise.resolve({ path: "/home/user/media", counts: { all: 1, unseen: 1, seen: 0, locked: 0, trashed: 0 } }) });
       if (url.startsWith("/api/media-items/stream?")) {
         return Promise.resolve({ ok: true, body: makeStreamBody([videoItem]) });
       }

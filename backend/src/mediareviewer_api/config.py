@@ -40,20 +40,21 @@ def _default_thumbnail_cache_directory(state_directory: Path) -> Path:
 def _load_server_settings_from_yaml(
     state_directory: Path,
     config_file_name: str,
-) -> tuple[str, int, tuple[str, ...], str]:
-    """Load backend listen host, port, trusted hosts, and log level from config.yaml."""
+) -> tuple[str, int, tuple[str, ...], str, int]:
+    """Load backend listen host, port, trusted hosts, log level, and
+    video_preload_mb from config.yaml."""
 
     config_file_path = state_directory / config_file_name
     if not config_file_path.exists():
-        return ("127.0.0.1", 5000, (), "INFO")
+        return ("127.0.0.1", 5000, (), "INFO", 50)
 
     raw_data = yaml.safe_load(config_file_path.read_text(encoding="utf-8"))
     if not isinstance(raw_data, dict):
-        return ("127.0.0.1", 5000, (), "INFO")
+        return ("127.0.0.1", 5000, (), "INFO", 50)
 
     raw_server = raw_data.get("server", {})
     if not isinstance(raw_server, dict):
-        return ("127.0.0.1", 5000, (), "INFO")
+        return ("127.0.0.1", 5000, (), "INFO", 50)
 
     host = str(raw_server.get("backend_host", "127.0.0.1"))
     port = int(raw_server.get("backend_port", 5000))
@@ -63,7 +64,8 @@ def _load_server_settings_from_yaml(
         if isinstance(item, str) and item
     )
     log_level = str(raw_server.get("log_level", "INFO")).upper()
-    return (host, port, trusted_hosts, log_level)
+    video_preload_mb = int(raw_server.get("video_preload_mb", 50))
+    return (host, port, trusted_hosts, log_level, video_preload_mb)
 
 
 @dataclass(frozen=True, slots=True)
@@ -99,7 +101,13 @@ class AppSettings:
         state_directory = Path(
             os.getenv("MEDIAREVIEWER_STATE_DIR", str(Path.home() / ".mediareviewer")),
         ).expanduser()
-        yaml_host, yaml_port, yaml_trusted_hosts, yaml_log_level = _load_server_settings_from_yaml(
+        (
+            yaml_host,
+            yaml_port,
+            yaml_trusted_hosts,
+            yaml_log_level,
+            yaml_video_preload_mb,
+        ) = _load_server_settings_from_yaml(
             state_directory,
             "config.yaml",
         )
@@ -111,7 +119,9 @@ class AppSettings:
             trusted_hosts=yaml_trusted_hosts,
             log_level=os.getenv("MEDIAREVIEWER_LOG_LEVEL", yaml_log_level).upper(),
             deletion_workers=int(os.getenv("MEDIAREVIEWER_DELETION_WORKERS", "2")),
-            video_preload_mb=int(os.getenv("MEDIAREVIEWER_VIDEO_PRELOAD_MB", "50")),
+            video_preload_mb=int(
+                os.getenv("MEDIAREVIEWER_VIDEO_PRELOAD_MB", str(yaml_video_preload_mb))
+            ),
             auto_thumbnail_on_add=os.getenv(
                 "MEDIAREVIEWER_AUTO_THUMBNAIL_ON_ADD", "true"
             ).lower() not in ("false", "0", "no"),

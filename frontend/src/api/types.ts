@@ -116,6 +116,10 @@ export interface StatusSummary {
   counts: Record<StatusFilter, number>;
 }
 
+export interface AppSettingsResponse {
+  videoPreloadMb: number;
+}
+
 /** Final line of a ``/api/media-items/stream`` NDJSON response. */
 export interface MediaStreamDone {
   type: "done";
