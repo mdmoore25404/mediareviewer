@@ -5,18 +5,21 @@ Media Reviewer is a mobile-first web application for sorting large image and vid
 The current prototype includes:
 
 - known review path management
-- recursive media scanning with non-media filtering
+- recursive media scanning with server-side status filtering and infinite scroll
 - disk-backed thumbnail generation and caching for scan results
-- grid and list views with cached previews
+- grid and list views with cached previews and per-status item counts
 - fullscreen review mode opened from a media card with keyboard and swipe/touch navigation
-- lock, trash, seen, and unseen companion-file actions
+- lock, trash, seen, and unseen companion-file actions with single-level undo
+- batch multi-select actions (long-press to enter selection mode)
+- async deletion queue with progress tracking and cancellation
+- settings panel with configurable video preload size
+- light, dark, and system theme modes
 
 ## Workspace layout
 
 - `backend/`: Flask API, typed Python source, and pytest/ruff tooling.
 - `frontend/`: Vite + React + TypeScript client with ESLint and Vitest.
 - `docs/`: Project and API documentation in Markdown suitable for Jekyll rendering.
-- `.TODO/`: Implementation backlog, status tracking, and lint lessons learned.
 
 ## Local development
 
