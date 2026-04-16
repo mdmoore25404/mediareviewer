@@ -24,17 +24,17 @@ const healthResponse: HealthResponse = {
 };
 
 const reviewPathsResponse: ReviewPathsResponse = {
-  knownPaths: ["/home/michaelmoore/trailcam"],
+  knownPaths: ["/home/user/media"],
   availablePaths: ["/home/michaelmoore", "/mnt"],
   hiddenPickerPaths: ["/proc"],
 };
 
 const mediaItems: MediaItem[] = [
   {
-    path: "/home/michaelmoore/trailcam/DCIM/100MEDIA/frame001.jpg",
+    path: "/home/user/media/DCIM/100MEDIA/frame001.jpg",
     name: "frame001.jpg",
     mediaType: "image",
-    thumbnailUrl: "/api/media-thumbnail?path=%2Fhome%2Fmichaelmoore%2Ftrailcam%2FDCIM%2F100MEDIA%2Fframe001.jpg&size=256",
+    thumbnailUrl: "/api/media-thumbnail?path=%2Fhome%2Fuser%2Fmedia%2FDCIM%2F100MEDIA%2Fframe001.jpg&size=256",
     sizeBytes: 1024,
     modifiedAt: "2026-04-12T21:50:19+00:00",
     createdAt: "2026-04-12T21:50:19+00:00",
@@ -49,10 +49,10 @@ const mediaItems: MediaItem[] = [
     },
   },
   {
-    path: "/home/michaelmoore/trailcam/DCIM/100MEDIA/frame002.jpg",
+    path: "/home/user/media/DCIM/100MEDIA/frame002.jpg",
     name: "frame002.jpg",
     mediaType: "image",
-    thumbnailUrl: "/api/media-thumbnail?path=%2Fhome%2Fmichaelmoore%2Ftrailcam%2FDCIM%2F100MEDIA%2Fframe002.jpg&size=256",
+    thumbnailUrl: "/api/media-thumbnail?path=%2Fhome%2Fuser%2Fmedia%2FDCIM%2F100MEDIA%2Fframe002.jpg&size=256",
     sizeBytes: 2048,
     modifiedAt: "2026-04-12T21:55:19+00:00",
     createdAt: "2026-04-12T21:55:19+00:00",
@@ -85,7 +85,7 @@ function makeStreamBody(items: MediaItem[]): ReadableStream<Uint8Array> {
 }
 
 const mediaActionResponse: MediaActionResponse = {
-  path: "/home/michaelmoore/trailcam/DCIM/100MEDIA/frame001.jpg",
+  path: "/home/user/media/DCIM/100MEDIA/frame001.jpg",
   action: "seen",
   status: {
     locked: false,
@@ -95,7 +95,7 @@ const mediaActionResponse: MediaActionResponse = {
 };
 
 const videoItem: MediaItem = {
-  path: "/home/michaelmoore/trailcam/DCIM/100MEDIA/clip001.mp4",
+  path: "/home/user/media/DCIM/100MEDIA/clip001.mp4",
   name: "clip001.mp4",
   mediaType: "video",
   thumbnailUrl: "",
@@ -132,7 +132,7 @@ describe("App", () => {
 
       if (url.endsWith("/api/review-paths") && init?.method === "DELETE") {
         const removeResponse: RemoveReviewPathResponse = {
-          removedPath: "/home/michaelmoore/trailcam",
+          removedPath: "/home/user/media",
           knownPaths: [],
         };
         return Promise.resolve({
@@ -206,7 +206,7 @@ describe("App", () => {
 
     await waitFor(() => {
       expect(screen.getByText("Media Reviewer")).toBeInTheDocument();
-      expect(screen.getByLabelText("Known path")).toHaveValue("/home/michaelmoore/trailcam");
+      expect(screen.getByLabelText("Known path")).toHaveValue("/home/user/media");
     });
 
     await user.click(screen.getByRole("button", { name: "Scan media" }));
@@ -329,7 +329,7 @@ describe("App", () => {
     render(<App />);
 
     await waitFor(() => {
-      expect(screen.getByLabelText("Known path")).toHaveValue("/home/michaelmoore/trailcam");
+      expect(screen.getByLabelText("Known path")).toHaveValue("/home/user/media");
     });
 
     const removeButton = screen.getByRole("button", { name: "Remove selected path" });

@@ -6,15 +6,15 @@ import { FolderBrowser } from "../FolderBrowser";
 import type { FoldersResponse } from "../api/types";
 
 const foldersResponse: FoldersResponse = {
-  path: "/home/michaelmoore/trailcam",
+  path: "/home/user/media",
   folders: [
-    { path: "/home/michaelmoore/trailcam/DCIM", name: "DCIM", has_children: true },
-    { path: "/home/michaelmoore/trailcam/Videos", name: "Videos", has_children: false },
+    { path: "/home/user/media/DCIM", name: "DCIM", has_children: true },
+    { path: "/home/user/media/Videos", name: "Videos", has_children: false },
   ],
 };
 
 const emptyFoldersResponse: FoldersResponse = {
-  path: "/home/michaelmoore/trailcam/Videos",
+  path: "/home/user/media/Videos",
   folders: [],
 };
 
@@ -30,7 +30,7 @@ describe("FolderBrowser", () => {
 
       if (url.startsWith("/api/folders?")) {
         const folderParam = new URL(url, "http://localhost").searchParams.get("path");
-        if (folderParam === "/home/michaelmoore/trailcam/Videos") {
+        if (folderParam === "/home/user/media/Videos") {
           return Promise.resolve({
             ok: true,
             json: () => Promise.resolve(emptyFoldersResponse),
@@ -58,14 +58,14 @@ describe("FolderBrowser", () => {
   it("renders available paths as root folders", () => {
     render(
       <FolderBrowser
-        availablePaths={["/home/michaelmoore/trailcam"]}
+        availablePaths={["/home/user/media"]}
         hiddenPaths={[]}
         onSelectFolder={vi.fn()}
         onClose={vi.fn()}
       />,
     );
 
-    expect(screen.getByText("/home/michaelmoore/trailcam")).toBeInTheDocument();
+    expect(screen.getByText("/home/user/media")).toBeInTheDocument();
   });
 
   it("shows empty state when no available paths provided", () => {
@@ -84,20 +84,20 @@ describe("FolderBrowser", () => {
   it("always shows the filesystem root '/' as a browsable root", () => {
     render(
       <FolderBrowser
-        availablePaths={["/home/michaelmoore/trailcam"]}
+        availablePaths={["/home/user/media"]}
         hiddenPaths={[]}
         onSelectFolder={vi.fn()}
         onClose={vi.fn()}
       />,
     );
 
-    expect(screen.getByText("/home/michaelmoore/trailcam")).toBeInTheDocument();
+    expect(screen.getByText("/home/user/media")).toBeInTheDocument();
   });
 
   it("expands a root folder to show child folders", async () => {
     render(
       <FolderBrowser
-        availablePaths={["/home/michaelmoore/trailcam"]}
+        availablePaths={["/home/user/media"]}
         hiddenPaths={[]}
         onSelectFolder={vi.fn()}
         onClose={vi.fn()}
@@ -105,7 +105,7 @@ describe("FolderBrowser", () => {
     );
 
     const expandBtn = screen.getByRole("button", {
-      name: /Expand \/home\/michaelmoore\/trailcam/,
+      name: /Expand \/home\/user\/media/,
     });
     await userEvent.click(expandBtn);
 
@@ -118,7 +118,7 @@ describe("FolderBrowser", () => {
   it("shows 'No subfolders' when a leaf folder is expanded", async () => {
     render(
       <FolderBrowser
-        availablePaths={["/home/michaelmoore/trailcam"]}
+        availablePaths={["/home/user/media"]}
         hiddenPaths={[]}
         onSelectFolder={vi.fn()}
         onClose={vi.fn()}
@@ -127,7 +127,7 @@ describe("FolderBrowser", () => {
 
     // Expand root to get children
     await userEvent.click(
-      screen.getByRole("button", { name: /Expand \/home\/michaelmoore\/trailcam/ }),
+      screen.getByRole("button", { name: /Expand \/home\/user\/media/ }),
     );
     await waitFor(() => expect(screen.getByText("Videos")).toBeInTheDocument());
 
@@ -144,30 +144,30 @@ describe("FolderBrowser", () => {
 
     render(
       <FolderBrowser
-        availablePaths={["/home/michaelmoore/trailcam"]}
+        availablePaths={["/home/user/media"]}
         hiddenPaths={[]}
         onSelectFolder={onSelectFolder}
         onClose={onClose}
       />,
     );
 
-    await userEvent.click(screen.getByText("/home/michaelmoore/trailcam"));
+    await userEvent.click(screen.getByText("/home/user/media"));
 
-    expect(onSelectFolder).toHaveBeenCalledWith("/home/michaelmoore/trailcam");
+    expect(onSelectFolder).toHaveBeenCalledWith("/home/user/media");
     expect(onClose).toHaveBeenCalled();
   });
 
   it("filters hidden paths from expanded children", async () => {
     render(
       <FolderBrowser
-        availablePaths={["/home/michaelmoore/trailcam"]}
-        hiddenPaths={["/home/michaelmoore/trailcam/DCIM"]}
+        availablePaths={["/home/user/media"]}
+        hiddenPaths={["/home/user/media/DCIM"]}
         onSelectFolder={vi.fn()}
         onClose={vi.fn()}
       />,
     );
 
-    await userEvent.click(screen.getByRole("button", { name: /Expand \/home\/michaelmoore\/trailcam/ }));
+    await userEvent.click(screen.getByRole("button", { name: /Expand \/home\/user\/media/ }));
 
     await waitFor(() => {
       expect(screen.queryByText("DCIM")).not.toBeInTheDocument();
@@ -180,7 +180,7 @@ describe("FolderBrowser", () => {
 
     render(
       <FolderBrowser
-        availablePaths={["/home/michaelmoore/trailcam"]}
+        availablePaths={["/home/user/media"]}
         hiddenPaths={[]}
         onSelectFolder={vi.fn()}
         onClose={onClose}
@@ -195,7 +195,7 @@ describe("FolderBrowser", () => {
   it("collapses a folder when the expand button is clicked a second time", async () => {
     render(
       <FolderBrowser
-        availablePaths={["/home/michaelmoore/trailcam"]}
+        availablePaths={["/home/user/media"]}
         hiddenPaths={[]}
         onSelectFolder={vi.fn()}
         onClose={vi.fn()}
@@ -203,14 +203,14 @@ describe("FolderBrowser", () => {
     );
 
     const expandBtn = screen.getByRole("button", {
-      name: /Expand \/home\/michaelmoore\/trailcam/,
+      name: /Expand \/home\/user\/media/,
     });
 
     await userEvent.click(expandBtn);
     await waitFor(() => expect(screen.getByText("DCIM")).toBeInTheDocument());
 
     const collapseBtn = screen.getByRole("button", {
-      name: /Collapse \/home\/michaelmoore\/trailcam/,
+      name: /Collapse \/home\/user\/media/,
     });
     await userEvent.click(collapseBtn);
 
