@@ -120,6 +120,17 @@ export interface AppSettingsResponse {
   videoPreloadMb: number;
 }
 
+export interface BatchActionResult {
+  path: string;
+  status: MediaStatus | null;
+  newPath: string | null;
+  error: string | null;
+}
+
+export interface BatchActionResponse {
+  results: BatchActionResult[];
+}
+
 /** Final line of a ``/api/media-items/stream`` NDJSON response. */
 export interface MediaStreamDone {
   type: "done";

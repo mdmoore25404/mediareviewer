@@ -1,6 +1,7 @@
 import type {
   AddReviewPathResponse,
   AppSettingsResponse,
+  BatchActionResponse,
   FolderFilesResponse,
   FoldersResponse,
   HealthResponse,
@@ -277,4 +278,21 @@ export async function patchSettings(
     signal,
   });
   return parseJsonResponse<AppSettingsResponse>(response);
+}
+
+export async function applyBatchAction(
+  paths: string[],
+  action: MediaAction,
+  signal: AbortSignal,
+): Promise<BatchActionResponse> {
+  const response = await fetch("/api/media-items/batch", {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ paths, action }),
+    signal,
+  });
+  return parseJsonResponse<BatchActionResponse>(response);
 }

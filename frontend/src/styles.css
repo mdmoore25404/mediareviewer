@@ -214,6 +214,7 @@ body {
 }
 
 .media-preview-shell {
+  position: relative;
   width: 100%;
   aspect-ratio: 16 / 10;
   border-radius: 0.9rem;
@@ -360,6 +361,36 @@ body {
 
 .settings-number-input {
   width: 6rem;
+}
+
+/* ── Batch multi-select ─────────────────────────────────────────────────── */
+
+.batch-toolbar {
+  border: 1px solid var(--bs-border-color);
+  border-radius: 0.375rem;
+  background: var(--bs-tertiary-bg);
+}
+
+.batch-toolbar-count {
+  font-size: 0.9rem;
+}
+
+.media-card--selected {
+  outline: 2px solid var(--bs-primary);
+  outline-offset: -2px;
+}
+
+.media-card-check {
+  position: absolute;
+  top: 0.4rem;
+  right: 0.4rem;
+  z-index: 2;
+  font-size: 1.25rem;
+  color: var(--bs-primary);
+  background: var(--bs-body-bg);
+  border-radius: 50%;
+  line-height: 1;
+  pointer-events: none;
 }
 
 .review-counter-loading {

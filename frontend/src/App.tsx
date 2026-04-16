@@ -2,6 +2,7 @@ import { type KeyboardEvent, type ReactElement, useEffect, useMemo, useRef, useS
 
 import {
   addReviewPath,
+  applyBatchAction,
   applyMediaAction,
   buildMediaFileUrl,
   buildMediaThumbnailUrl,
@@ -17,6 +18,7 @@ import {
 } from "./api/client";
 import type {
   AppSettingsResponse,
+  BatchActionResult,
   HealthResponse,
   LogsResponse,
   MediaAction,
@@ -163,6 +165,10 @@ function App(): ReactElement {
   const [settingsSaving, setSettingsSaving] = useState<boolean>(false);
   const settingsAbortRef = useRef<AbortController | null>(null);
   const [isActionPending, setIsActionPending] = useState<boolean>(false);
+  const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
+  const [isBatchPending, setIsBatchPending] = useState<boolean>(false);
+  const batchAbortRef = useRef<AbortController | null>(null);
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [statusSummary, setStatusSummary] = useState<StatusSummary | null>(null);
   const summaryAbortRef = useRef<AbortController | null>(null);
   const [undoRecord, setUndoRecord] = useState<UndoRecord | null>(null);
@@ -217,6 +223,7 @@ function App(): ReactElement {
     setHasMore(false);
     setScanCursor(null);
     setStatusMessage(null);
+    setSelectedItems(new Set());
   }, [statusFilter]);
 
   // Load status counts whenever the selected path changes.
@@ -424,6 +431,42 @@ function App(): ReactElement {
   // eslint-disable-next-line react-hooks/exhaustive-deps -- showNextReviewItem captures displayedItems/activeReviewIndex which are already deps
   }, [activeReviewIndex, activeReviewItem, displayedItems, showHelp, trashLockedWarning]);
 
+  const handleBatchAction = async (action: MediaAction): Promise<void> => {
+    if (isBatchPending || selectedItems.size === 0) return;
+    batchAbortRef.current?.abort();
+    const controller = new AbortController();
+    batchAbortRef.current = controller;
+    setIsBatchPending(true);
+    setErrorMessage(null);
+    try {
+      const paths = Array.from(selectedItems);
+      const response = await applyBatchAction(paths, action, controller.signal);
+      const resultsByPath = new Map<string, BatchActionResult>(
+        response.results.map((r) => [r.path, r]),
+      );
+      setMediaItems((previous) =>
+        previous.map((item) => {
+          const result = resultsByPath.get(item.path);
+          if (!result || result.error || result.status === null) return item;
+          return {
+            ...item,
+            path: result.newPath ?? item.path,
+            status: result.status,
+          };
+        }),
+      );
+      setSelectedItems(new Set());
+      if (selectedPath) loadStatusSummary(selectedPath);
+    } catch (error: unknown) {
+      if (error instanceof Error && error.name === "AbortError") return;
+      const message =
+        error instanceof Error ? error.message : "Batch action failed.";
+      setErrorMessage(message);
+    } finally {
+      setIsBatchPending(false);
+    }
+  };
+
   const scheduleUndo = (record: UndoRecord): void => {
     if (undoTimerRef.current !== null) clearTimeout(undoTimerRef.current);
     setUndoRecord(record);
@@ -470,6 +513,7 @@ function App(): ReactElement {
     setScanCursor(null);
     setStatusMessage(null);
     setErrorMessage(null);
+    setSelectedItems(new Set());
 
     let count = 0;
     try {
@@ -1073,22 +1117,130 @@ function App(): ReactElement {
                   <p className="mb-0 text-secondary small">Ignored while scanning: {ignoredCount}</p>
                 </div>
 
+                {selectedItems.size > 0 && (
+                  <div
+                    className="batch-toolbar d-flex flex-wrap align-items-center gap-2 mb-3 p-2"
+                    role="toolbar"
+                    aria-label="Batch actions"
+                  >
+                    <span className="batch-toolbar-count fw-semibold me-1">
+                      {selectedItems.size} selected
+                    </span>
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-outline-success"
+                      disabled={isBatchPending}
+                      onClick={() => { void handleBatchAction("seen"); }}
+                    >
+                      Mark Seen
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-outline-secondary"
+                      disabled={isBatchPending}
+                      onClick={() => { void handleBatchAction("unseen"); }}
+                    >
+                      Mark Unseen
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-outline-primary"
+                      disabled={isBatchPending}
+                      onClick={() => { void handleBatchAction("lock"); }}
+                    >
+                      Lock
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-outline-danger"
+                      disabled={isBatchPending}
+                      onClick={() => { void handleBatchAction("trash"); }}
+                    >
+                      Trash
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-outline-secondary ms-auto"
+                      onClick={() => { setSelectedItems(new Set()); }}
+                      aria-label="Cancel selection"
+                    >
+                      <i className="fa-solid fa-xmark me-1" aria-hidden="true" />
+                      Cancel
+                    </button>
+                  </div>
+                )}
+
                 <div className={viewMode === "grid" ? "media-grid" : "media-list"}>
-                  {displayedItems.map((item) => (
+                  {displayedItems.map((item) => {
+                    const isSelected = selectedItems.has(item.path);
+                    const isMultiSelectActive = selectedItems.size > 0;
+                    return (
                     <article
                       key={item.path}
-                      className={viewMode === "grid" ? "media-card" : "media-row"}
+                      className={[
+                        viewMode === "grid" ? "media-card" : "media-row",
+                        isSelected ? "media-card--selected" : "",
+                      ]
+                        .filter(Boolean)
+                        .join(" ")}
                       data-testid="media-item"
                       role="button"
                       tabIndex={0}
+                      aria-pressed={isMultiSelectActive ? isSelected : undefined}
                       onClick={() => {
-                        openReviewMode(item.path);
+                        if (isMultiSelectActive) {
+                          setSelectedItems((prev) => {
+                            const next = new Set(prev);
+                            if (next.has(item.path)) next.delete(item.path);
+                            else next.add(item.path);
+                            return next;
+                          });
+                        } else {
+                          openReviewMode(item.path);
+                        }
                       }}
                       onKeyDown={(event) => {
-                        handleCardKeyDown(event, item.path);
+                        if (isMultiSelectActive && event.key === " ") {
+                          event.preventDefault();
+                          setSelectedItems((prev) => {
+                            const next = new Set(prev);
+                            if (next.has(item.path)) next.delete(item.path);
+                            else next.add(item.path);
+                            return next;
+                          });
+                        } else {
+                          handleCardKeyDown(event, item.path);
+                        }
+                      }}
+                      onPointerDown={() => {
+                        longPressTimerRef.current = setTimeout(() => {
+                          longPressTimerRef.current = null;
+                          setSelectedItems((prev) => {
+                            const next = new Set(prev);
+                            next.add(item.path);
+                            return next;
+                          });
+                        }, 400);
+                      }}
+                      onPointerUp={() => {
+                        if (longPressTimerRef.current !== null) {
+                          clearTimeout(longPressTimerRef.current);
+                          longPressTimerRef.current = null;
+                        }
+                      }}
+                      onPointerCancel={() => {
+                        if (longPressTimerRef.current !== null) {
+                          clearTimeout(longPressTimerRef.current);
+                          longPressTimerRef.current = null;
+                        }
                       }}
                     >
                       <div className="media-preview-shell">
+                        {isSelected && (
+                          <span className="media-card-check" aria-hidden="true">
+                            <i className="fa-solid fa-circle-check" />
+                          </span>
+                        )}
                         {renderMediaPreview(item, "media-preview")}
                       </div>
                       <div className="media-card-body">
@@ -1177,7 +1329,7 @@ function App(): ReactElement {
                         </div>
                       </div>
                     </article>
-                  ))}
+                  );})}
                   {displayedItems.length === 0 && (
                     <div className="metric-card">
                       <p className="mb-0">

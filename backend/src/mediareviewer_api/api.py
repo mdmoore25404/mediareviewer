@@ -343,6 +343,138 @@ def get_media_items_summary() -> Response:
     return jsonify({"path": str(requested_path), "counts": counts})
 
 
+_BATCH_ACTION_VALID = frozenset({"lock", "unlock", "trash", "untrash", "seen", "unseen"})
+_BATCH_MAX_PATHS = 500
+
+
+@api_blueprint.post("/media-items/batch")
+def post_batch_action() -> Response:
+    """Apply a single action to multiple media items and return per-item results.
+
+    Request body::
+
+        {
+            "paths": ["/abs/path/to/file1.jpg", "/abs/path/to/file2.mp4"],
+            "action": "seen"
+        }
+
+    Response (HTTP 207 Multi-Status)::
+
+        {
+            "results": [
+                {
+                    "path": "/abs/path/to/file1.jpg",
+                    "status": {"locked": false, "trashed": false, "seen": true},
+                    "newPath": null,
+                    "error": null
+                },
+                {
+                    "path": "/abs/path/to/file2.mp4",
+                    "status": null,
+                    "newPath": null,
+                    "error": "Locked items cannot be trashed."
+                }
+            ]
+        }
+    """
+
+    config_store = cast(
+        ReviewConfigStore,
+        current_app.extensions["mediareviewer.review_config_store"],
+    )
+    action_service = cast(
+        CompanionActionService,
+        current_app.extensions["mediareviewer.companion_actions"],
+    )
+    thumbnail_cache = cast(
+        ThumbnailCacheService,
+        current_app.extensions["mediareviewer.thumbnail_cache"],
+    )
+
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict):
+        return jsonify({"error": "Request body must be a JSON object."}), 400
+
+    raw_paths = body.get("paths")
+    action = body.get("action")
+
+    if not isinstance(raw_paths, list) or not raw_paths:
+        return jsonify({"error": "'paths' must be a non-empty array."}), 400
+    if len(raw_paths) > _BATCH_MAX_PATHS:
+        return jsonify({"error": f"'paths' must contain at most {_BATCH_MAX_PATHS} items."}), 400
+    if not all(isinstance(p, str) and p.strip() for p in raw_paths):
+        return jsonify({"error": "Each entry in 'paths' must be a non-empty string."}), 400
+    if action not in _BATCH_ACTION_VALID:
+        return jsonify(
+            {"error": f"'action' must be one of {', '.join(sorted(_BATCH_ACTION_VALID))}."}
+        ), 400
+
+    config = config_store.load()
+    results: list[dict[str, object]] = []
+
+    for raw_path in raw_paths:
+        media_path = Path(raw_path).expanduser().resolve()
+
+        if not media_path.exists() or not media_path.is_file():
+            results.append(
+                {"path": raw_path, "status": None, "newPath": None, "error": "File not found."}
+            )
+            continue
+
+        if not _is_under_known_path(media_path, config.known_paths):
+            results.append(
+                {
+                    "path": raw_path,
+                    "status": None,
+                    "newPath": None,
+                    "error": "Path is not under a configured review path.",
+                }
+            )
+            continue
+
+        try:
+            status = cast(
+                CompanionStatus, action_service.apply(media_path=media_path, action=action)
+            )
+        except LockedItemError as exc:
+            results.append(
+                {"path": raw_path, "status": None, "newPath": None, "error": str(exc)}
+            )
+            continue
+
+        new_path: str | None = None
+        if action == "trash":
+            trash_path = media_path.parent / ".trash" / media_path.name
+            new_path = str(trash_path)
+            review_path = next(
+                (
+                    rp
+                    for rp in config.known_paths
+                    if media_path == rp or str(media_path).startswith(str(rp / ""))
+                ),
+                None,
+            )
+            if review_path:
+                thumbnail_cache.delete_thumbnail(media_path, review_path)
+        elif action == "untrash":
+            new_path = str(media_path.parent.parent / media_path.name)
+
+        results.append(
+            {
+                "path": raw_path,
+                "status": {
+                    "locked": status.locked,
+                    "trashed": status.trashed,
+                    "seen": status.seen,
+                },
+                "newPath": new_path,
+                "error": None,
+            }
+        )
+
+    return jsonify({"results": results}), 207
+
+
 @api_blueprint.get("/media-items/stream")
 def stream_media_items() -> Response:
     """Stream media items as NDJSON, yielding each item as soon as it is found.

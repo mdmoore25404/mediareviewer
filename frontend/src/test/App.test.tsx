@@ -200,6 +200,24 @@ describe("App", () => {
         });
       }
 
+      if (url.endsWith("/api/media-items/batch") && init?.method === "POST") {
+        return Promise.resolve({
+          ok: true,
+          status: 207,
+          json: () =>
+            Promise.resolve({
+              results: [
+                {
+                  path: "/home/user/media/DCIM/100MEDIA/frame001.jpg",
+                  status: { locked: false, trashed: false, seen: true },
+                  newPath: null,
+                  error: null,
+                },
+              ],
+            }),
+        });
+      }
+
       return Promise.resolve({
         ok: false,
         json: () => Promise.resolve({ error: `Unhandled request: ${url}` }),
