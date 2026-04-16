@@ -99,7 +99,7 @@ function App(): ReactElement {
   const [hiddenPaths, setHiddenPaths] = useState<string[]>([]);
   const [availablePaths, setAvailablePaths] = useState<string[]>([]);
   const [selectedPath, setSelectedPath] = useState<string>("");
-  const [newPathInput, setNewPathInput] = useState<string>("/home/michaelmoore/trailcam");
+  const [newPathInput, setNewPathInput] = useState<string>("");
   const [mediaItems, setMediaItems] = useState<MediaItem[]>([]);
   const [ignoredCount, setIgnoredCount] = useState<number>(0);
   const [scanLimit, setScanLimit] = useState<number>(20);
@@ -160,6 +160,9 @@ function App(): ReactElement {
         setKnownPaths(pathsPayload.knownPaths);
         setHiddenPaths(pathsPayload.hiddenPickerPaths);
         setAvailablePaths(pathsPayload.availablePaths);
+        if (pathsPayload.availablePaths.length > 0) {
+          setNewPathInput(pathsPayload.availablePaths[0]);
+        }
         if (pathsPayload.knownPaths.length > 0) {
           setSelectedPath(pathsPayload.knownPaths[0]);
         }
