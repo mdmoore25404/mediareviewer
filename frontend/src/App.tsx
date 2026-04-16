@@ -740,7 +740,7 @@ function App(): ReactElement {
                       setNewPathInput(event.target.value);
                     }}
                     className="form-control"
-                    placeholder="/home/michaelmoore/trailcam"
+                    placeholder="/path/to/review"
                     aria-label="Path to add"
                   />
                   <button
