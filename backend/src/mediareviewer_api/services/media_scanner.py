@@ -45,6 +45,53 @@ COMPANION_SUFFIXES: frozenset[str] = frozenset({".lock", ".seen"})
 # ``100MEDIA``, ``101GOPRO``, ``102_PANO``.
 DCIM_SUBDIR_PATTERN: re.Pattern[str] = re.compile(r"^\d{3}[A-Za-z0-9_]+$")
 
+# ---------------------------------------------------------------------------
+# In-memory DCIM subtree cache
+#
+# ``_find_dcim_subtrees`` performs a directory-only ``os.walk`` that can take
+# 1–18 s over a network mount.  Subsequent calls for the same root (e.g.
+# pagination requests) get an instant cache hit provided neither the root
+# directory mtime nor the direct ``DCIM/`` child mtime has changed.
+#
+# Limitation: subtrees nested deeper than ``<root>/DCIM`` (e.g.
+# ``<root>/cam1/DCIM/100MEDIA``) are only re-discovered when the root mtime
+# changes.  For trail-camera workloads this is acceptable because the
+# directory structure changes infrequently relative to file additions.
+# ---------------------------------------------------------------------------
+
+# Key → {"root_mtime": int | None, "dcim_mtime": int | None,
+#         "subtrees": list[str]}  (mtimes in nanoseconds)
+_dcim_subtree_cache: dict[str, dict[str, object]] = {}
+
+
+def _dcim_cache_mtimes(root: Path) -> tuple[int | None, int | None]:
+    """Return ``(root_mtime_ns, dcim_dir_mtime_ns)`` used to validate the cache for *root*.
+
+    Nanosecond integer timestamps avoid the float-precision loss that ``st_mtime``
+    (a double) can introduce for timestamps around 1.7 × 10⁹ seconds.
+    """
+    try:
+        root_mtime: int | None = root.stat().st_mtime_ns
+    except OSError:
+        root_mtime = None
+    dcim_dir = root / "DCIM"
+    try:
+        dcim_mtime: int | None = dcim_dir.stat().st_mtime_ns if dcim_dir.is_dir() else None
+    except OSError:
+        dcim_mtime = None
+    return root_mtime, dcim_mtime
+
+
+def _clear_dcim_cache() -> None:
+    """Evict all entries from the in-memory DCIM subtree cache.
+
+    Intended for use in tests to prevent cross-test contamination.  Not
+    needed in production because each unique ``tmp_path`` is a distinct cache
+    key, but useful when a test mutates a directory it has already scanned.
+    """
+    _dcim_subtree_cache.clear()
+
+
 StatusFilter = Literal["all", "unseen", "seen", "locked", "trashed"]
 
 _log = logging.getLogger(__name__)
@@ -200,9 +247,31 @@ def _find_dcim_subtrees(root: Path) -> list[Path]:
     are skipped.  Recursion stops when a DCF numbered directory is found
     because no further DCF nesting is expected inside those leaf directories.
 
+    Results are cached in memory keyed by the resolved root path.  The cache
+    entry is invalidated when the root directory mtime or the direct
+    ``<root>/DCIM`` child mtime changes.  Call :func:`_clear_dcim_cache` to
+    evict all entries (useful in tests).
+
     Returns a list of :class:`~pathlib.Path` objects sorted lexicographically.
     Returns an empty list when the tree contains no DCIM structure.
     """
+    cache_key = str(root)
+    root_mtime, dcim_mtime = _dcim_cache_mtimes(root)
+
+    entry = _dcim_subtree_cache.get(cache_key)
+    if (
+        entry is not None
+        and entry["root_mtime"] == root_mtime
+        and entry["dcim_mtime"] == dcim_mtime
+    ):
+        cached_subtrees: list[str] = entry["subtrees"]  # type: ignore[assignment]
+        _log.debug(
+            "_find_dcim_subtrees: cache hit for %s (%d subtree(s))",
+            root,
+            len(cached_subtrees),
+        )
+        return [Path(p) for p in cached_subtrees]
+
     results: list[Path] = []
     for dirpath, dirnames, _filenames in os.walk(str(root)):
         p = Path(dirpath)
@@ -211,7 +280,18 @@ def _find_dcim_subtrees(root: Path) -> list[Path]:
             dirnames[:] = []  # leaf — no further nesting expected
             continue
         dirnames[:] = sorted(d for d in dirnames if not d.startswith("."))
-    return sorted(results)
+    results_sorted = sorted(results)
+    _dcim_subtree_cache[cache_key] = {
+        "root_mtime": root_mtime,
+        "dcim_mtime": dcim_mtime,
+        "subtrees": [str(p) for p in results_sorted],
+    }
+    _log.debug(
+        "_find_dcim_subtrees: cache miss for %s — found %d subtree(s)",
+        root,
+        len(results_sorted),
+    )
+    return results_sorted
 
 
 def _iter_candidates(root: Path) -> Iterator[Path]:

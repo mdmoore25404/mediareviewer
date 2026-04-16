@@ -1,9 +1,12 @@
 """Tests for MediaScanner DCIM detection and incremental walk helpers."""
 
+import os
+import time
 from pathlib import Path
 
 from mediareviewer_api.services.media_scanner import (
     MediaScanner,
+    _clear_dcim_cache,
     _find_dcim_subtrees,
     _iter_candidates,
     _iter_trash_candidates,
@@ -149,6 +152,78 @@ def test_find_dcim_subtrees_skips_hidden_directories(tmp_path: Path) -> None:
     result = _find_dcim_subtrees(tmp_path)
     assert len(result) == 1
     assert result[0] == tmp_path / "visible" / "DCIM" / "100MEDIA"
+
+
+# ---------------------------------------------------------------------------
+# _find_dcim_subtrees — in-memory cache
+# ---------------------------------------------------------------------------
+
+
+def test_find_dcim_subtrees_cache_hit_returns_same_result(tmp_path: Path) -> None:
+    """A second call for the same root path returns a cache hit with identical results."""
+    _clear_dcim_cache()
+    (tmp_path / "DCIM" / "100MEDIA").mkdir(parents=True)
+
+    first = _find_dcim_subtrees(tmp_path)
+    second = _find_dcim_subtrees(tmp_path)
+    assert first == second
+
+
+def test_find_dcim_subtrees_cache_invalidates_on_root_mtime_change(
+    tmp_path: Path,
+) -> None:
+    """Adding a new top-level dir changes root mtime and forces a cache miss."""
+    _clear_dcim_cache()
+    (tmp_path / "DCIM" / "100MEDIA").mkdir(parents=True)
+
+    first = _find_dcim_subtrees(tmp_path)
+    assert len(first) == 1
+
+    # Add a second camera directory at the root level then explicitly bump
+    # root mtime — tmpfs can have 1-second granularity so we cannot rely on
+    # the natural mtime change being visible within the same test second.
+    (tmp_path / "cam2" / "DCIM" / "100MEDIA").mkdir(parents=True)
+    future = time.time() + 2.0
+    os.utime(str(tmp_path), (future, future))
+
+    second = _find_dcim_subtrees(tmp_path)
+    assert len(second) == 2
+
+
+def test_find_dcim_subtrees_cache_invalidates_on_dcim_mtime_change(
+    tmp_path: Path,
+) -> None:
+    """Adding a new numbered subdir changes DCIM mtime and forces a cache miss."""
+    _clear_dcim_cache()
+    (tmp_path / "DCIM" / "100MEDIA").mkdir(parents=True)
+
+    first = _find_dcim_subtrees(tmp_path)
+    assert len(first) == 1
+
+    # Create a new numbered subdir then explicitly bump DCIM/ mtime — tmpfs
+    # can have 1-second granularity so we cannot rely on the natural mtime
+    # change being visible within the same test second.
+    (tmp_path / "DCIM" / "101MEDIA").mkdir(parents=True)
+    future = time.time() + 2.0
+    os.utime(str(tmp_path / "DCIM"), (future, future))
+
+    second = _find_dcim_subtrees(tmp_path)
+    assert len(second) == 2
+
+
+def test_find_dcim_subtrees_clear_cache_forces_fresh_walk(tmp_path: Path) -> None:
+    """_clear_dcim_cache evicts all entries so the next call does a fresh walk."""
+    _clear_dcim_cache()
+    (tmp_path / "DCIM" / "100MEDIA").mkdir(parents=True)
+
+    _find_dcim_subtrees(tmp_path)  # populate cache
+    _clear_dcim_cache()
+    (tmp_path / "DCIM" / "101MEDIA").mkdir(
+        parents=True
+    )  # would be missed on a stale hit
+
+    result = _find_dcim_subtrees(tmp_path)
+    assert len(result) == 2
 
 
 # ---------------------------------------------------------------------------
