@@ -174,7 +174,8 @@ Returns paginated media files (images and videos only) in a single folder, non-r
       },
       "metadata": {
         "width": 4096,
-        "height": 3072
+        "height": 3072,
+        "duration_seconds": null
       }
     }
   ]
@@ -188,6 +189,7 @@ Returns paginated media files (images and videos only) in a single folder, non-r
 - Results are sorted alphabetically by filename.
 - Each item includes `thumbnailUrl` pointing to the cached thumbnail.
 - Pagination is supported via `offset` and `limit` parameters for large folders.
+- `metadata.width` and `metadata.height` are populated from Pillow for images and from `ffprobe` for videos. `metadata.duration_seconds` is populated from `ffprobe` for videos; `null` for images or when `ffprobe` is unavailable/times out.
 
 ### Errors
 
@@ -209,7 +211,7 @@ Scans a known review path recursively and streams image/video files as NDJSON (o
 Response `Content-Type` is `application/x-ndjson`. Each line (except the last) is a media item:
 
 ```json
-{"path": "/home/michaelmoore/trailcam/DCIM/100MEDIA/frame001.jpg", "name": "frame001.jpg", "mediaType": "image", "thumbnailUrl": "/api/media-thumbnail?path=...&size=256", "sizeBytes": 154323, "modifiedAt": "2026-04-12T21:50:19.123456+00:00", "createdAt": "2026-04-12T21:50:19.123456+00:00", "status": {"locked": false, "trashed": false, "seen": true}, "metadata": {"width": 1920, "height": 1080}}
+{"path": "/home/michaelmoore/trailcam/DCIM/100MEDIA/frame001.jpg", "name": "frame001.jpg", "mediaType": "image", "thumbnailUrl": "/api/media-thumbnail?path=...&size=256", "sizeBytes": 154323, "modifiedAt": "2026-04-12T21:50:19.123456+00:00", "createdAt": "2026-04-12T21:50:19.123456+00:00", "status": {"locked": false, "trashed": false, "seen": true}, "metadata": {"width": 1920, "height": 1080, "duration_seconds": null}}
 ```
 
 The final line is always the done sentinel:

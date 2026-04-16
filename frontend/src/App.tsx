@@ -89,6 +89,17 @@ function formatSize(sizeBytes: number): string {
   return `${(mib / 1024).toFixed(1)} GiB`;
 }
 
+function formatDuration(seconds: number): string {
+  const total = Math.round(seconds);
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  if (h > 0) {
+    return `${String(h)}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+  }
+  return `${String(m)}:${String(s).padStart(2, "0")}`;
+}
+
 const SPEED_STEPS = [0.5, 1, 1.5, 2, 4, 8] as const;
 type SpeedStep = (typeof SPEED_STEPS)[number];
 
@@ -1271,8 +1282,21 @@ function App(): ReactElement {
                         {item.metadata.width && item.metadata.height && (
                           <p className="small text-secondary mb-2">
                             {item.metadata.width} x {item.metadata.height}
+                            {item.mediaType === "video" &&
+                              item.metadata.durationSeconds !== null && (
+                                <span className="ms-2">
+                                  · {formatDuration(item.metadata.durationSeconds)}
+                                </span>
+                              )}
                           </p>
                         )}
+                        {item.mediaType === "video" &&
+                          item.metadata.durationSeconds !== null &&
+                          !(item.metadata.width && item.metadata.height) && (
+                            <p className="small text-secondary mb-2">
+                              {formatDuration(item.metadata.durationSeconds)}
+                            </p>
+                          )}
                         <div
                           className="d-flex flex-wrap gap-2"
                           onClick={(event) => {
@@ -1686,6 +1710,19 @@ function App(): ReactElement {
                     {activeReviewItem.name}
                     <span className="review-footer-meta ms-2" aria-hidden="true">
                       {formatSize(activeReviewItem.sizeBytes)} · {new Date(activeReviewItem.modifiedAt).toLocaleString()}
+                      {activeReviewItem.mediaType === "video" &&
+                        activeReviewItem.metadata.width !== null &&
+                        activeReviewItem.metadata.height !== null && (
+                          <span>
+                            {" "}· {activeReviewItem.metadata.width} x {activeReviewItem.metadata.height}
+                          </span>
+                        )}
+                      {activeReviewItem.mediaType === "video" &&
+                        activeReviewItem.metadata.durationSeconds !== null && (
+                          <span>
+                            {" "}· {formatDuration(activeReviewItem.metadata.durationSeconds)}
+                          </span>
+                        )}
                     </span>
                   </h2>
 
