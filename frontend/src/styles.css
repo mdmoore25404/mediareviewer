@@ -353,6 +353,11 @@ body {
   white-space: nowrap;
 }
 
+.review-undo-btn {
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+
 .review-counter-loading {
   font-size: 0.72rem;
   font-weight: 400;

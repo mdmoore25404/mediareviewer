@@ -34,6 +34,16 @@ interface TrashLockedWarning {
   item: MediaItem;
   fromReview: boolean;
 }
+
+interface UndoRecord {
+  /** The path to call the API with (post-action path for trash/untrash). */
+  itemPath: string;
+  /** The reverse action to apply on undo. */
+  reverseAction: MediaAction;
+  /** Human-readable label shown in the undo button, e.g. "Undo: marked seen". */
+  label: string;
+}
+
 type SortOption = "modified-desc" | "modified-asc" | "size-desc" | "size-asc" | "name-asc";
 
 function sortMediaItems(items: MediaItem[], sortOption: SortOption): MediaItem[] {
@@ -147,6 +157,8 @@ function App(): ReactElement {
   const [isActionPending, setIsActionPending] = useState<boolean>(false);
   const [statusSummary, setStatusSummary] = useState<StatusSummary | null>(null);
   const summaryAbortRef = useRef<AbortController | null>(null);
+  const [undoRecord, setUndoRecord] = useState<UndoRecord | null>(null);
+  const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [logs, setLogs] = useState<LogsResponse | null>(null);
   const [logsLoading, setLogsLoading] = useState<boolean>(false);
   const logsAbortRef = useRef<AbortController | null>(null);
@@ -401,6 +413,21 @@ function App(): ReactElement {
   // eslint-disable-next-line react-hooks/exhaustive-deps -- showNextReviewItem captures displayedItems/activeReviewIndex which are already deps
   }, [activeReviewIndex, activeReviewItem, displayedItems, showHelp, trashLockedWarning]);
 
+  const scheduleUndo = (record: UndoRecord): void => {
+    if (undoTimerRef.current !== null) clearTimeout(undoTimerRef.current);
+    setUndoRecord(record);
+    undoTimerRef.current = setTimeout(() => {
+      setUndoRecord(null);
+      undoTimerRef.current = null;
+    }, 5000);
+  };
+
+  const clearUndo = (): void => {
+    if (undoTimerRef.current !== null) clearTimeout(undoTimerRef.current);
+    undoTimerRef.current = null;
+    setUndoRecord(null);
+  };
+
   const loadStatusSummary = (path: string): void => {
     if (!path) return;
     summaryAbortRef.current?.abort();
@@ -558,18 +585,23 @@ function App(): ReactElement {
     }
   };
 
-  const handleMediaAction = async (itemPath: string, action: MediaAction): Promise<void> => {
+  const handleMediaAction = async (
+    itemPath: string,
+    action: MediaAction,
+    fromReview = false,
+  ): Promise<void> => {
     if (isActionPending) return;
     setIsActionPending(true);
     setErrorMessage(null);
     try {
       const payload = await applyMediaAction(itemPath, action);
+      const resolvedNewPath = payload.newPath ?? itemPath;
       setMediaItems((previous) =>
         previous.map((item) =>
           item.path === payload.path
             ? {
                 ...item,
-                path: payload.newPath ?? item.path,
+                path: resolvedNewPath,
                 status: payload.status,
               }
             : item,
@@ -577,6 +609,35 @@ function App(): ReactElement {
       );
       // Refresh per-status counts so filter labels stay accurate.
       if (selectedPath) loadStatusSummary(selectedPath);
+      // Show undo button in review mode for reversible actions.
+      if (fromReview) {
+        const reverseMap: Partial<Record<MediaAction, MediaAction>> = {
+          seen: "unseen",
+          unseen: "seen",
+          trash: "untrash",
+          untrash: "trash",
+          lock: "unlock",
+          unlock: "lock",
+        };
+        const actionLabels: Partial<Record<MediaAction, string>> = {
+          seen: "marked seen",
+          unseen: "marked unseen",
+          trash: "trashed",
+          untrash: "untrashed",
+          lock: "locked",
+          unlock: "unlocked",
+        };
+        const reverseAction = reverseMap[action];
+        if (reverseAction) {
+          scheduleUndo({
+            itemPath: resolvedNewPath,
+            reverseAction,
+            label: `Undo: ${actionLabels[action] ?? action}`,
+          });
+        }
+      } else {
+        clearUndo();
+      }
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Unable to apply media action.";
       setErrorMessage(message);
@@ -624,7 +685,7 @@ function App(): ReactElement {
     const { item, fromReview } = trashLockedWarning;
     setTrashLockedWarning(null);
     await handleMediaAction(item.path, "unlock");
-    await handleMediaAction(item.path, "trash");
+    await handleMediaAction(item.path, "trash", fromReview);
     if (fromReview) {
       showNextReviewItem();
     }
@@ -658,6 +719,7 @@ function App(): ReactElement {
   };
 
   const showPreviousReviewItem = (): void => {
+    clearUndo();
     if (displayedItems.length === 0 || activeReviewIndex <= 0) {
       return;
     }
@@ -665,6 +727,7 @@ function App(): ReactElement {
   };
 
   const showNextReviewItem = (): void => {
+    clearUndo();
     if (displayedItems.length === 0 || activeReviewIndex === -1) {
       return;
     }
@@ -1176,6 +1239,20 @@ function App(): ReactElement {
                     </button>
                   )}
                 </p>
+                {undoRecord !== null && (
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-outline-light review-undo-btn"
+                    disabled={isActionPending}
+                    onClick={() => {
+                      void handleMediaAction(undoRecord.itemPath, undoRecord.reverseAction);
+                      clearUndo();
+                    }}
+                  >
+                    <i className="fa-solid fa-rotate-left me-1" aria-hidden="true" />
+                    {undoRecord.label}
+                  </button>
+                )}
                 <button
                   type="button"
                   className="btn btn-outline-light"
@@ -1457,10 +1534,10 @@ function App(): ReactElement {
                     disabled={isActionPending}
                     onClick={() => {
                       if (activeReviewItem.status.locked) {
-                        void handleMediaAction(activeReviewItem.path, "unlock");
+                        void handleMediaAction(activeReviewItem.path, "unlock", true);
                       } else {
                         void (async () => {
-                          await handleMediaAction(activeReviewItem.path, "lock");
+                          await handleMediaAction(activeReviewItem.path, "lock", true);
                           showNextReviewItem();
                         })();
                       }
@@ -1475,12 +1552,12 @@ function App(): ReactElement {
                     disabled={isActionPending}
                     onClick={() => {
                       if (activeReviewItem.status.trashed) {
-                        void handleMediaAction(activeReviewItem.path, "untrash");
+                        void handleMediaAction(activeReviewItem.path, "untrash", true);
                       } else if (activeReviewItem.status.locked) {
                         setTrashLockedWarning({ item: activeReviewItem, fromReview: true });
                       } else {
                         void (async () => {
-                          await handleMediaAction(activeReviewItem.path, "trash");
+                          await handleMediaAction(activeReviewItem.path, "trash", true);
                           showNextReviewItem();
                         })();
                       }
@@ -1495,10 +1572,10 @@ function App(): ReactElement {
                     disabled={isActionPending}
                     onClick={() => {
                       if (activeReviewItem.status.seen) {
-                        void handleMediaAction(activeReviewItem.path, "unseen");
+                        void handleMediaAction(activeReviewItem.path, "unseen", true);
                       } else {
                         void (async () => {
-                          await handleMediaAction(activeReviewItem.path, "seen");
+                          await handleMediaAction(activeReviewItem.path, "seen", true);
                           showNextReviewItem();
                         })();
                       }
