@@ -142,6 +142,7 @@ function App(): ReactElement {
   const [showHelp, setShowHelp] = useState<boolean>(false);
   const [trashLockedWarning, setTrashLockedWarning] = useState<TrashLockedWarning | null>(null);
   const [showSettings, setShowSettings] = useState<boolean>(false);
+  const [isActionPending, setIsActionPending] = useState<boolean>(false);
   const [logs, setLogs] = useState<LogsResponse | null>(null);
   const [logsLoading, setLogsLoading] = useState<boolean>(false);
   const logsAbortRef = useRef<AbortController | null>(null);
@@ -532,6 +533,8 @@ function App(): ReactElement {
   };
 
   const handleMediaAction = async (itemPath: string, action: MediaAction): Promise<void> => {
+    if (isActionPending) return;
+    setIsActionPending(true);
     setErrorMessage(null);
     try {
       const payload = await applyMediaAction(itemPath, action);
@@ -549,6 +552,8 @@ function App(): ReactElement {
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Unable to apply media action.";
       setErrorMessage(message);
+    } finally {
+      setIsActionPending(false);
     }
   };
 
@@ -1016,6 +1021,7 @@ function App(): ReactElement {
                           <button
                             type="button"
                             className="btn btn-sm btn-outline-primary"
+                            disabled={isActionPending}
                             onClick={() => {
                               void handleMediaAction(item.path, "lock");
                             }}
@@ -1025,6 +1031,7 @@ function App(): ReactElement {
                           <button
                             type="button"
                             className="btn btn-sm btn-outline-danger"
+                            disabled={isActionPending}
                             onClick={() => {
                               if (item.status.locked) {
                                 setTrashLockedWarning({ item, fromReview: false });
@@ -1038,6 +1045,7 @@ function App(): ReactElement {
                           <button
                             type="button"
                             className="btn btn-sm btn-outline-success"
+                            disabled={isActionPending}
                             onClick={() => {
                               void handleMediaAction(item.path, "seen");
                             }}
@@ -1047,6 +1055,7 @@ function App(): ReactElement {
                           <button
                             type="button"
                             className="btn btn-sm btn-outline-secondary"
+                            disabled={isActionPending}
                             onClick={() => {
                               void handleMediaAction(item.path, "unseen");
                             }}
@@ -1402,6 +1411,7 @@ function App(): ReactElement {
                   <button
                     type="button"
                     className={activeReviewItem.status.locked ? "btn btn-warning" : "btn btn-outline-warning"}
+                    disabled={isActionPending}
                     onClick={() => {
                       if (activeReviewItem.status.locked) {
                         void handleMediaAction(activeReviewItem.path, "unlock");
@@ -1419,6 +1429,7 @@ function App(): ReactElement {
                   <button
                     type="button"
                     className={activeReviewItem.status.trashed ? "btn btn-danger" : "btn btn-outline-danger"}
+                    disabled={isActionPending}
                     onClick={() => {
                       if (activeReviewItem.status.trashed) {
                         void handleMediaAction(activeReviewItem.path, "untrash");
@@ -1438,6 +1449,7 @@ function App(): ReactElement {
                   <button
                     type="button"
                     className={activeReviewItem.status.seen ? "btn btn-success" : "btn btn-outline-success"}
+                    disabled={isActionPending}
                     onClick={() => {
                       if (activeReviewItem.status.seen) {
                         void handleMediaAction(activeReviewItem.path, "unseen");
