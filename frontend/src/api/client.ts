@@ -11,6 +11,7 @@ import type {
   RemoveReviewPathResponse,
   ReviewPathsResponse,
   StatusFilter,
+  StatusSummary,
   TrashProgressEvent,
 } from "./types";
 
@@ -70,6 +71,19 @@ export async function removeReviewPath(path: string): Promise<RemoveReviewPathRe
     body: JSON.stringify({ path }),
   });
   return parseJsonResponse<RemoveReviewPathResponse>(response);
+}
+
+/** Fetch per-status item counts for a review path without streaming items. */
+export async function fetchStatusSummary(
+  path: string,
+  signal: AbortSignal,
+): Promise<StatusSummary> {
+  const url = `/api/media-items/summary?path=${encodeURIComponent(path)}`;
+  const response = await fetch(url, {
+    headers: { Accept: "application/json" },
+    signal,
+  });
+  return parseJsonResponse<StatusSummary>(response);
 }
 
 /**

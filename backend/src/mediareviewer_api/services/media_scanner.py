@@ -456,9 +456,7 @@ class MediaScanner:
             if count >= limit:
                 break
 
-    def scan_folder(
-        self, folder_path: Path, offset: int = 0, limit: int = 100
-    ) -> ScanResult:
+    def scan_folder(self, folder_path: Path, offset: int = 0, limit: int = 100) -> ScanResult:
         """Scan a single folder (not recursive) with pagination support."""
 
         items: list[MediaItem] = []
@@ -483,6 +481,58 @@ class MediaScanner:
             items.append(self._build_media_item(candidate, media_type))
 
         return ScanResult(items=tuple(items), ignored_count=ignored_count)
+
+    def count_by_status(self, root_path: Path) -> dict[str, int]:
+        """Count media files by status in a single pass without building MediaItem objects.
+
+        Returns a dict with keys ``all``, ``unseen``, ``seen``, ``locked``,
+        ``trashed``.  The ``all`` key includes trashed items.  The ``seen``,
+        ``unseen``, and ``locked`` keys exclude trashed items (consistent with
+        the behaviour of :meth:`scan_stream` status filters).
+        """
+        normalized_root = root_path.expanduser().resolve()
+        counts: dict[str, int] = {
+            "all": 0,
+            "unseen": 0,
+            "seen": 0,
+            "locked": 0,
+            "trashed": 0,
+        }
+
+        for candidate in _iter_candidates(normalized_root):
+            if not candidate.is_file():
+                continue
+            if self._is_in_hidden_directory(candidate, normalized_root):
+                continue
+            if self._is_companion_file(candidate):
+                continue
+            if self._detect_media_type(candidate) is None:
+                continue
+            counts["all"] += 1
+            seen_exists = candidate.with_suffix(
+                f"{candidate.suffix}.seen"
+            ).exists()
+            locked_exists = candidate.with_suffix(
+                f"{candidate.suffix}.lock"
+            ).exists()
+            if locked_exists:
+                counts["locked"] += 1
+            if seen_exists:
+                counts["seen"] += 1
+            else:
+                counts["unseen"] += 1
+
+        for candidate in _iter_trash_candidates(normalized_root):
+            if not candidate.is_file():
+                continue
+            if self._is_companion_file(candidate):
+                continue
+            if self._detect_media_type(candidate) is None:
+                continue
+            counts["trashed"] += 1
+            counts["all"] += 1
+
+        return counts
 
     def get_folders(self, parent_path: Path) -> tuple[FolderInfo, ...]:
         """Get sorted list of immediate child folders.

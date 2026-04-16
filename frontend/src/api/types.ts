@@ -111,6 +111,11 @@ export interface FolderFilesResponse {
   items: MediaItem[];
 }
 
+export interface StatusSummary {
+  path: string;
+  counts: Record<StatusFilter, number>;
+}
+
 /** Final line of a ``/api/media-items/stream`` NDJSON response. */
 export interface MediaStreamDone {
   type: "done";

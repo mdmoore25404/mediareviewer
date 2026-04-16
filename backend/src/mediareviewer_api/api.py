@@ -250,6 +250,52 @@ def remove_review_path() -> Response:
     return jsonify(payload)
 
 
+@api_blueprint.get("/media-items/summary")
+def get_media_items_summary() -> Response:
+    """Return per-status item counts for a review path without streaming items.
+
+    Query parameters:
+    - ``path``: absolute path of a configured review root (required).
+
+    Response body::
+
+        {
+            "path": "/mnt/trailcam",
+            "counts": {
+                "all": 100,
+                "unseen": 47,
+                "seen": 12,
+                "locked": 3,
+                "trashed": 8
+            }
+        }
+
+    The ``all`` key includes trashed items.  The ``seen``, ``unseen``, and
+    ``locked`` keys exclude trashed items, matching the behaviour of the
+    ``statusFilter`` parameter on the streaming endpoint.
+    """
+    config_store = cast(
+        ReviewConfigStore,
+        current_app.extensions["mediareviewer.review_config_store"],
+    )
+    media_scanner = cast(
+        MediaScanner,
+        current_app.extensions["mediareviewer.media_scanner"],
+    )
+
+    raw_path = request.args.get("path", type=str)
+    if not raw_path:
+        return jsonify({"error": "Query parameter 'path' is required."}), 400
+
+    requested_path = Path(raw_path).expanduser().resolve()
+    config = config_store.load()
+    if requested_path not in config.known_paths:
+        return jsonify({"error": "Path is not configured as a known review path."}), 403
+
+    counts = media_scanner.count_by_status(requested_path)
+    return jsonify({"path": str(requested_path), "counts": counts})
+
+
 @api_blueprint.get("/media-items/stream")
 def stream_media_items() -> Response:
     """Stream media items as NDJSON, yielding each item as soon as it is found.

@@ -8,6 +8,7 @@ import {
   fetchHealth,
   fetchLogs,
   fetchReviewPaths,
+  fetchStatusSummary,
   removeReviewPath,
   streamEmptyTrash,
   streamMediaItems,
@@ -18,6 +19,7 @@ import type {
   MediaAction,
   MediaItem,
   StatusFilter,
+  StatusSummary,
   TrashProgressEvent,
 } from "./api/types";
 import { TrashProgressDialog } from "./TrashProgressDialog";
@@ -143,6 +145,8 @@ function App(): ReactElement {
   const [trashLockedWarning, setTrashLockedWarning] = useState<TrashLockedWarning | null>(null);
   const [showSettings, setShowSettings] = useState<boolean>(false);
   const [isActionPending, setIsActionPending] = useState<boolean>(false);
+  const [statusSummary, setStatusSummary] = useState<StatusSummary | null>(null);
+  const summaryAbortRef = useRef<AbortController | null>(null);
   const [logs, setLogs] = useState<LogsResponse | null>(null);
   const [logsLoading, setLogsLoading] = useState<boolean>(false);
   const logsAbortRef = useRef<AbortController | null>(null);
@@ -191,6 +195,14 @@ function App(): ReactElement {
     setScanCursor(null);
     setStatusMessage(null);
   }, [statusFilter]);
+
+  // Load status counts whenever the selected path changes.
+  useEffect(() => {
+    setStatusSummary(null);
+    if (selectedPath) {
+      loadStatusSummary(selectedPath);
+    }
+  }, [selectedPath]); // loadStatusSummary receives path as argument; no closure dep needed
 
   const displayedItems = useMemo(() => {
     // Status filtering is now handled by the backend; only media-type filtering remains here.
@@ -389,6 +401,20 @@ function App(): ReactElement {
   // eslint-disable-next-line react-hooks/exhaustive-deps -- showNextReviewItem captures displayedItems/activeReviewIndex which are already deps
   }, [activeReviewIndex, activeReviewItem, displayedItems, showHelp, trashLockedWarning]);
 
+  const loadStatusSummary = (path: string): void => {
+    if (!path) return;
+    summaryAbortRef.current?.abort();
+    const controller = new AbortController();
+    summaryAbortRef.current = controller;
+    fetchStatusSummary(path, controller.signal)
+      .then((summary) => {
+        setStatusSummary(summary);
+      })
+      .catch(() => {
+        /* ignore abort / network errors — counts are best-effort */
+      });
+  };
+
   const handleScan = async (): Promise<void> => {
     if (!selectedPath) {
       setErrorMessage("Pick a review path before scanning.");
@@ -549,6 +575,8 @@ function App(): ReactElement {
             : item,
         ),
       );
+      // Refresh per-status counts so filter labels stay accurate.
+      if (selectedPath) loadStatusSummary(selectedPath);
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Unable to apply media action.";
       setErrorMessage(message);
@@ -883,11 +911,21 @@ function App(): ReactElement {
                         setStatusFilter(event.target.value as StatusFilter);
                       }}
                     >
-                      <option value="all">All</option>
-                      <option value="locked">Locked</option>
-                      <option value="trashed">Trashed</option>
-                      <option value="seen">Seen</option>
-                      <option value="unseen">Unseen</option>
+                      <option value="all">
+                        All{statusSummary ? ` (${statusSummary.counts.all})` : ""}
+                      </option>
+                      <option value="locked">
+                        Locked{statusSummary ? ` (${statusSummary.counts.locked})` : ""}
+                      </option>
+                      <option value="trashed">
+                        Trashed{statusSummary ? ` (${statusSummary.counts.trashed})` : ""}
+                      </option>
+                      <option value="seen">
+                        Seen{statusSummary ? ` (${statusSummary.counts.seen})` : ""}
+                      </option>
+                      <option value="unseen">
+                        Unseen{statusSummary ? ` (${statusSummary.counts.unseen})` : ""}
+                      </option>
                     </select>
                   </div>
                   <div>
@@ -1113,6 +1151,11 @@ function App(): ReactElement {
                 </button>
                 <p className="review-counter mb-0">
                   {activeReviewIndex + 1} / {displayedItems.length}
+                  {statusFilter === "unseen" && statusSummary !== null && (
+                    <span className="review-counter-remaining ms-2" aria-label="Unseen items remaining">
+                      · {statusSummary.counts.unseen} unseen remaining
+                    </span>
+                  )}
                   {isFetchingMore && (
                     <span className="review-counter-loading ms-2" aria-label="Loading more items">
                       <span className="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true" />

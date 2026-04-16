@@ -346,6 +346,13 @@ body {
   font-weight: 700;
 }
 
+.review-counter-remaining {
+  font-size: 0.78rem;
+  font-weight: 400;
+  opacity: 0.75;
+  white-space: nowrap;
+}
+
 .review-counter-loading {
   font-size: 0.72rem;
   font-weight: 400;
