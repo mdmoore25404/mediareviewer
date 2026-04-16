@@ -66,16 +66,22 @@ graph LR
     subgraph Health
         H["GET /api/health"]
     end
+    subgraph Settings["Settings"]
+        S_GET["GET /api/settings"]
+        S_PATCH["PATCH /api/settings\n{videoPreloadMb}"]
+    end
     subgraph Paths
         RP_GET["GET /api/review-paths"]
         RP_POST["POST /api/review-paths"]
+        RP_DEL["DELETE /api/review-paths"]
     end
     subgraph Browse
         FOLD["GET /api/folders"]
         FILES["GET /api/folders/files"]
     end
     subgraph Scan
-        STREAM["GET /api/media-items/stream\n?path &limit &offset &statusFilter"]
+        STREAM["GET /api/media-items/stream\n?path &limit &after &statusFilter"]
+        SUMMARY["GET /api/media-items/summary\n?path"]
     end
     subgraph Media
         FILE["GET /api/media-file\n?path"]
@@ -84,6 +90,9 @@ graph LR
     subgraph Actions
         ACTION["POST /api/media-actions\n{path, action}"]
         TRASH["POST /api/empty-trash"]
+    end
+    subgraph Logs
+        LOGS["GET /api/logs\n?lines"]
     end
 ```
 
