@@ -46,6 +46,7 @@ const mediaItems: MediaItem[] = [
     metadata: {
       width: 12,
       height: 8,
+      durationSeconds: null,
     },
   },
   {
@@ -64,6 +65,7 @@ const mediaItems: MediaItem[] = [
     metadata: {
       width: 10,
       height: 10,
+      durationSeconds: null,
     },
   },
 ];
@@ -103,7 +105,7 @@ const videoItem: MediaItem = {
   modifiedAt: "2026-04-12T21:50:19+00:00",
   createdAt: "2026-04-12T21:50:19+00:00",
   status: { locked: false, trashed: false, seen: false },
-  metadata: { width: null, height: null },
+  metadata: { width: null, height: null, durationSeconds: null },
 };
 
 describe("App", () => {
@@ -534,4 +536,78 @@ describe("App", () => {
     expect(screen.getByTestId("log-viewer")).toHaveTextContent(
       "2026-04-14 INFO mediareviewer_api.app: Starting",
     );
-  });});
+  });
+
+  it("shows video duration in grid card when durationSeconds is present", async () => {
+    const user = userEvent.setup();
+    const videoWithDuration: MediaItem = {
+      ...videoItem,
+      metadata: { width: 1920, height: 1080, durationSeconds: 63 },
+    };
+
+    vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      if (url.endsWith("/api/health")) return Promise.resolve({ ok: true, json: () => Promise.resolve(healthResponse) });
+      if (url.endsWith("/api/review-paths") && (!init?.method || init.method === "GET")) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve(reviewPathsResponse) });
+      }
+      if (url.endsWith("/api/settings")) return Promise.resolve({ ok: true, json: () => Promise.resolve({ videoPreloadMb: 50 }) });
+      if (url.startsWith("/api/media-items/summary")) return Promise.resolve({ ok: true, json: () => Promise.resolve({ path: "/home/user/media", counts: { all: 1, unseen: 1, seen: 0, locked: 0, trashed: 0 } }) });
+      if (url.startsWith("/api/media-items/stream?")) {
+        return Promise.resolve({ ok: true, body: makeStreamBody([videoWithDuration]) });
+      }
+      return Promise.resolve({ ok: false, json: () => Promise.resolve({ error: "unhandled" }) });
+    }));
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Scan media" })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole("button", { name: "Scan media" }));
+    await waitFor(() => { expect(screen.getByText("clip001.mp4")).toBeInTheDocument(); });
+
+    // Grid card should show "1:03" (63 seconds formatted as m:ss)
+    expect(screen.getByText(/1:03/)).toBeInTheDocument();
+  });
+
+  it("shows video duration in review dialog footer when durationSeconds is present", async () => {
+    const user = userEvent.setup();
+    const videoWithDuration: MediaItem = {
+      ...videoItem,
+      metadata: { width: 1280, height: 720, durationSeconds: 125 },
+    };
+
+    vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      if (url.endsWith("/api/health")) return Promise.resolve({ ok: true, json: () => Promise.resolve(healthResponse) });
+      if (url.endsWith("/api/review-paths") && (!init?.method || init.method === "GET")) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve(reviewPathsResponse) });
+      }
+      if (url.endsWith("/api/settings")) return Promise.resolve({ ok: true, json: () => Promise.resolve({ videoPreloadMb: 50 }) });
+      if (url.startsWith("/api/media-items/summary")) return Promise.resolve({ ok: true, json: () => Promise.resolve({ path: "/home/user/media", counts: { all: 1, unseen: 1, seen: 0, locked: 0, trashed: 0 } }) });
+      if (url.startsWith("/api/media-items/stream?")) {
+        return Promise.resolve({ ok: true, body: makeStreamBody([videoWithDuration]) });
+      }
+      return Promise.resolve({ ok: false, json: () => Promise.resolve({ error: "unhandled" }) });
+    }));
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Scan media" })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole("button", { name: "Scan media" }));
+    await waitFor(() => { expect(screen.getByText("clip001.mp4")).toBeInTheDocument(); });
+    await user.click(screen.getByText("clip001.mp4"));
+
+    await waitFor(() => {
+      expect(screen.getByRole("group", { name: "Video playback controls" })).toBeInTheDocument();
+    });
+
+    // Review dialog footer should show "2:05" (125 seconds formatted as m:ss)
+    expect(screen.getAllByText(/2:05/).length).toBeGreaterThan(0);
+  });
+});

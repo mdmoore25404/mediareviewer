@@ -64,13 +64,13 @@ def test_stream_media_items_returns_supported_files_and_status(tmp_path: Path) -
     image_item = next(item for item in items if item["name"] == "frame001.jpg")
     assert image_item["mediaType"] == "image"
     assert image_item["status"] == {"locked": False, "trashed": False, "seen": True}
-    assert image_item["metadata"] == {"width": 12, "height": 8}
+    assert image_item["metadata"] == {"width": 12, "height": 8, "duration_seconds": None}
     assert image_item["thumbnailUrl"].startswith("/api/media-thumbnail?")
 
     video_item = next(item for item in items if item["name"] == "clip001.mp4")
     assert video_item["mediaType"] == "video"
     assert video_item["status"] == {"locked": True, "trashed": False, "seen": False}
-    assert video_item["metadata"] == {"width": None, "height": None}
+    assert video_item["metadata"] == {"width": None, "height": None, "duration_seconds": None}
     assert video_item["thumbnailUrl"].startswith("/api/media-thumbnail?")
 
 

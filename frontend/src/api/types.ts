@@ -45,6 +45,7 @@ export interface MediaStatus {
 export interface MediaMetadata {
   width: number | null;
   height: number | null;
+  durationSeconds: number | null;
 }
 
 export interface MediaItem {

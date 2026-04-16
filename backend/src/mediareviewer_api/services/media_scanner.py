@@ -1,8 +1,11 @@
 """Filesystem scanner for image and video review items."""
 
+import json
 import logging
 import os
 import re
+import shutil
+import subprocess
 from collections.abc import Iterator
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
@@ -106,12 +109,17 @@ class MediaStatus:
     seen: bool
 
 
+# Timeout (seconds) for a single ffprobe invocation.
+_FFPROBE_TIMEOUT: int = 5
+
+
 @dataclass(frozen=True, slots=True)
 class MediaMetadata:
     """Optional metadata derived from media probing."""
 
     width: int | None
     height: int | None
+    duration_seconds: float | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -343,6 +351,69 @@ def _iter_candidates(root: Path) -> Iterator[Path]:
             continue
         for filename in sorted(filenames):
             yield p / filename
+
+
+def _probe_video_metadata(file_path: Path) -> MediaMetadata:
+    """Run ``ffprobe`` on *file_path* and return duration and pixel dimensions.
+
+    Returns a :class:`MediaMetadata` with ``width``, ``height``, and
+    ``duration_seconds`` populated from the first video stream found by
+    ffprobe.  Returns ``MediaMetadata(None, None, None)`` when:
+
+    * ``ffprobe`` is not installed / not on ``$PATH``.
+    * The process times out (capped at :data:`_FFPROBE_TIMEOUT` seconds).
+    * The output cannot be parsed (corrupt file, audio-only, etc.).
+    * Any :class:`OSError` or :class:`subprocess.SubprocessError` is raised.
+    """
+    if shutil.which("ffprobe") is None:
+        return MediaMetadata(width=None, height=None, duration_seconds=None)
+
+    cmd = [
+        "ffprobe",
+        "-v", "quiet",
+        "-print_format", "json",
+        "-show_entries", "stream=width,height:format=duration",
+        "-select_streams", "v:0",
+        str(file_path),
+    ]
+    try:
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            timeout=_FFPROBE_TIMEOUT,
+        )
+    except (OSError, subprocess.SubprocessError):
+        _log.debug("ffprobe failed for %s", file_path)
+        return MediaMetadata(width=None, height=None, duration_seconds=None)
+
+    try:
+        data = json.loads(result.stdout)
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        _log.debug("ffprobe returned unparseable output for %s", file_path)
+        return MediaMetadata(width=None, height=None, duration_seconds=None)
+
+    streams: list[dict[str, object]] = data.get("streams", [])
+    fmt: dict[str, object] = data.get("format", {})
+
+    width: int | None = None
+    height: int | None = None
+    if streams:
+        raw_w = streams[0].get("width")
+        raw_h = streams[0].get("height")
+        if isinstance(raw_w, int):
+            width = raw_w
+        if isinstance(raw_h, int):
+            height = raw_h
+
+    duration_seconds: float | None = None
+    raw_dur = fmt.get("duration")
+    if isinstance(raw_dur, str | float | int):
+        try:
+            duration_seconds = float(raw_dur)
+        except ValueError:
+            pass
+
+    return MediaMetadata(width=width, height=height, duration_seconds=duration_seconds)
 
 
 class MediaScanner:
@@ -639,9 +710,14 @@ class MediaScanner:
         )
 
     def _probe_metadata(self, file_path: Path, media_type: str) -> MediaMetadata:
-        if media_type != "image":
-            return MediaMetadata(width=None, height=None)
+        if media_type == "image":
+            return self._probe_image_metadata(file_path)
+        if media_type == "video":
+            return _probe_video_metadata(file_path)
+        return MediaMetadata(width=None, height=None)
 
+    def _probe_image_metadata(self, file_path: Path) -> MediaMetadata:
+        """Return pixel dimensions for an image file via Pillow."""
         try:
             with Image.open(file_path) as image:
                 width, height = image.size
