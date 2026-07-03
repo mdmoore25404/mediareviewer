@@ -54,8 +54,31 @@ fi
 docker buildx use "$BUILDER_NAME"
 
 # ── Authenticate with GHCR via gh CLI ─────────────────────────────────────
-echo "Logging in to ghcr.io..."
-gh auth token | docker login ghcr.io -u mdmoore25404 --password-stdin
+if [[ "$LOAD_ONLY" == "false" ]]; then
+    echo "Logging in to ghcr.io..."
+    if [[ -n "${GHCR_TOKEN:-}" ]]; then
+        GHCR_USERNAME="${GHCR_USERNAME:-mdmoore25404}"
+        echo "Using GHCR_TOKEN for ghcr.io login as '${GHCR_USERNAME}'."
+        printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --password-stdin
+    else
+        if ! gh auth status -h github.com -t 2>&1 | grep -q 'write:packages'; then
+            cat >&2 <<'EOF'
+Current GitHub CLI token is missing the 'write:packages' scope required for GHCR push.
+
+Fix with one of these options:
+  1) Refresh gh auth scopes:
+     gh auth refresh -h github.com -s write:packages
+
+  2) Use a Personal Access Token instead:
+     export GHCR_USERNAME=<github-username>
+     export GHCR_TOKEN=<token-with-write:packages>
+EOF
+            exit 1
+        fi
+
+        gh auth token | docker login ghcr.io -u mdmoore25404 --password-stdin
+    fi
+fi
 
 # ── Assemble tag list ──────────────────────────────────────────────────────
 TAGS=("${IMAGE}:latest")
